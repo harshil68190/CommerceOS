@@ -1,0 +1,29 @@
+# requirements.txt
+#
+# Responsibility: pins every third-party dependency the backend
+# foundation needs, with exact versions so local dev, CI, and the Docker
+# image all install byte-for-byte the same dependency set. No dependency
+# beyond what this milestone (app skeleton, DB/Redis wiring, tests)
+# actually uses is included — feature-module dependencies (e.g. a JWT
+# library, Celery) are added in the milestones that introduce them.
+
+# --- Web framework ---------------------------------------------------
+fastapi
+uvicorn[standard]
+
+# --- Database ---------------------------------------------------
+sqlalchemy
+alembic
+psycopg[binary]
+
+# --- Cache / connection store ---------------------------------------------------
+redis
+
+# --- Configuration & validation ---------------------------------------------------
+pydantic
+pydantic-settings
+python-dotenv
+
+# --- Testing ---------------------------------------------------
+pytest
+httpx

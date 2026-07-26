@@ -1,0 +1,82 @@
+# docker-compose.yml
+#
+# Responsibility: orchestrates the three services this milestone needs —
+# the FastAPI backend, PostgreSQL, and Redis — for local development and
+# integration testing. Every service has a healthcheck, and the backend
+# only starts once its real dependencies (Postgres, Redis) report
+# healthy, not just "started" — this avoids the classic race condition
+# where the app boots before Postgres is actually ready to accept
+# connections.
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: commerceos_backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    # Mounts the app source so local code changes are reflected without
+    # rebuilding the image during development. Combined with
+    # `--reload`, this gives a fast local dev loop; the override is
+    # applied via the command below rather than baked into the Dockerfile
+    # so the production image (built the same way) runs without --reload.
+    volumes:
+      - ./app:/app/app
+      - ./alembic:/app/alembic
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: commerceos_postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-commerceos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-commerceos}
+      POSTGRES_DB: ${POSTGRES_DB:-commerceos}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-commerceos}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: commerceos_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+
+# Named volumes persist data across `docker compose down`/`up` cycles —
+# without these, every restart would silently wipe the database, which
+# is fine for CI but wrong for local development.
+volumes:
+  postgres_data:
+  redis_data:
