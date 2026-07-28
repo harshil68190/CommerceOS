@@ -23,8 +23,9 @@ from sqlalchemy.orm import Session
 from app.core.exceptions import ConflictError, NotFoundError, ValidationError
 from app.models.product import Product, ProductStatus
 from app.models.user import User
+from app.modules.inventory.product_inventory_service import ProductInventoryService
 from app.modules.products.repository import ProductFilters, ProductRepository
-from app.schemas.product import CreateProductRequest, StockAdjustmentRequest, UpdateProductRequest
+from app.schemas.product import CreateProductRequest, UpdateProductRequest
 
 # Statuses a customer-facing listing/search/detail lookup is allowed to
 # surface. Per this milestone's business rule ("Only ACTIVE products
@@ -39,7 +40,11 @@ _CUSTOMER_VISIBLE_STATUSES = (ProductStatus.ACTIVE,)
 
 class ProductService:
     """Business logic for creating, updating, archiving, deleting,
-    reading, searching, and adjusting stock for catalog products."""
+    reading, and searching catalog products.
+
+    NOTE: Stock operations have been moved to the Inventory module
+    (StockMovementService in modules/inventory/). Product-level
+    stock aggregates are available via ProductInventoryService."""
 
     def __init__(self, repository: ProductRepository, db: Session) -> None:
         self.repository = repository
@@ -74,10 +79,9 @@ class ProductService:
             price=payload.price,
             compare_at_price=payload.compare_at_price,
             currency=payload.currency,
-            stock_quantity=payload.stock_quantity,
-            reserved_quantity=0,  # a brand-new product can't already have
-            # reservations against it — this is only ever advanced by the
-            # dedicated stock-reservation flow after creation.
+            # NOTE: stock_quantity and reserved_quantity are no longer
+            # stored on Product. Use the Inventory module
+            # (POST /inventory/stock/add) for initial stock.
             weight=payload.weight,
             status=payload.status,
             is_featured=payload.is_featured,
@@ -130,13 +134,9 @@ class ProductService:
         updates["updated_by"] = current_user.id
         updated = self.repository.update(product, **updates)
 
-        # A status change (or, in principle, any update) could leave the
-        # active/out-of-stock flag out of sync with actual available
-        # stock — e.g. an admin manually reactivating a product that
-        # still has zero available units. Re-deriving it here keeps the
-        # invariant correct after every write, not just after stock
-        # operations.
-        self._sync_status_with_stock(updated)
+        # Sync status with inventory data (available stock from
+        # Inventory module determines OUT_OF_STOCK status).
+        self._sync_product_status_from_inventory(product.id)
 
         self.db.commit()
         return updated
@@ -240,156 +240,19 @@ class ProductService:
         return self.repository.search(filters=filters, page=page, page_size=page_size)
 
     # --- Stock operations ---------------------------------------------------
-
-    def adjust_stock(
-        self, product_id: uuid.UUID, payload: StockAdjustmentRequest, current_user: User
-    ) -> Product:
-        """
-        Dispatches a single stock-adjustment request to the appropriate
-        dedicated operation. This is the method `router.py`'s
-        `PATCH /products/{id}/stock` endpoint calls — kept as a thin
-        dispatcher so each individual operation (increase/decrease/
-        reserve/release) stays independently callable, documented, and
-        testable, per this milestone's explicit method list.
-        """
-        operation_map = {
-            "increase": self.increase_stock,
-            "decrease": self.decrease_stock,
-            "reserve": self.reserve_stock,
-            "release": self.release_reservation,
-        }
-        return operation_map[payload.operation](product_id, payload.quantity, current_user)
-
-    def increase_stock(
-        self, product_id: uuid.UUID, quantity: int, current_user: User
-    ) -> Product:
-        """
-        Increases on-hand stock (e.g. a new shipment/restock arrived).
-
-        Business reasoning: increasing stock can only ever *relax* the
-        reserved-vs-available invariant (more stock means more headroom
-        for existing reservations), so no ceiling check is needed here —
-        unlike `decrease_stock`, which must guard against dropping below
-        already-reserved quantity.
-        """
-        product = self._get_modifiable_product_or_404(product_id)
-        self._validate_tracks_inventory(product)
-        self._validate_positive_quantity(quantity)
-
-        new_quantity = product.stock_quantity + quantity
-        updated = self.repository.update(
-            product, stock_quantity=new_quantity, updated_by=current_user.id
-        )
-        self._sync_status_with_stock(updated)
-        self.db.commit()
-        return updated
-
-    def decrease_stock(
-        self, product_id: uuid.UUID, quantity: int, current_user: User
-    ) -> Product:
-        """
-        Decreases on-hand stock directly (e.g. damage, loss, manual
-        correction) — distinct from `reserve_stock`, which earmarks
-        stock for a pending sale without physically removing it yet.
-
-        Business reasoning: the result must never leave
-        `stock_quantity < reserved_quantity` — the database's own CHECK
-        constraint (`ck_products_reserved_within_stock`) would reject
-        this at the SQL level regardless, but validating here first
-        means the client gets a specific, actionable `ValidationError`
-        instead of a raw database constraint-violation error.
-        """
-        product = self._get_modifiable_product_or_404(product_id)
-        self._validate_tracks_inventory(product)
-        self._validate_positive_quantity(quantity)
-
-        new_quantity = product.stock_quantity - quantity
-        if new_quantity < 0:
-            raise ValidationError(
-                f"Cannot decrease stock by {quantity}: only "
-                f"{product.stock_quantity} units are on hand."
-            )
-        if new_quantity < product.reserved_quantity:
-            raise ValidationError(
-                f"Cannot decrease stock by {quantity}: {product.reserved_quantity} "
-                f"units are already reserved and cannot exceed on-hand stock."
-            )
-
-        updated = self.repository.update(
-            product, stock_quantity=new_quantity, updated_by=current_user.id
-        )
-        self._sync_status_with_stock(updated)
-        self.db.commit()
-        return updated
-
-    def reserve_stock(
-        self, product_id: uuid.UUID, quantity: int, current_user: User
-    ) -> Product:
-        """
-        Earmarks stock for a pending sale (e.g. an item added to an
-        in-progress checkout) without physically removing it from
-        on-hand inventory — this is the operation a future Orders module
-        would call during checkout, mirroring the architecture doc's
-        "Request Lifecycle" section on stock reservation at order time.
-
-        Business reasoning: raises `ConflictError` (409, not 422) when
-        there isn't enough *available* stock (`stock_quantity -
-        reserved_quantity`) — this is a conflict with the product's
-        current state (someone else may have just reserved the remaining
-        units), the same category of error as two users racing to claim
-        the last unit, not a malformed request.
-        """
-        product = self._get_modifiable_product_or_404(product_id)
-        self._validate_tracks_inventory(product)
-        self._validate_positive_quantity(quantity)
-
-        if quantity > product.available_quantity:
-            raise ConflictError(
-                f"Cannot reserve {quantity} units: only "
-                f"{product.available_quantity} are currently available."
-            )
-
-        updated = self.repository.update(
-            product,
-            reserved_quantity=product.reserved_quantity + quantity,
-            updated_by=current_user.id,
-        )
-        self._sync_status_with_stock(updated)
-        self.db.commit()
-        return updated
-
-    def release_reservation(
-        self, product_id: uuid.UUID, quantity: int, current_user: User
-    ) -> Product:
-        """
-        Releases a previously reserved quantity back to available stock
-        (e.g. a cart expired, or checkout/payment failed) — the
-        counterpart to `reserve_stock`.
-
-        Business reasoning: releasing more than is currently reserved
-        would drive `reserved_quantity` negative, which is nonsensical
-        (you can't un-reserve stock that was never reserved) and would
-        violate the same CHECK constraint that guards
-        `reserved_quantity >= 0`.
-        """
-        product = self._get_modifiable_product_or_404(product_id)
-        self._validate_tracks_inventory(product)
-        self._validate_positive_quantity(quantity)
-
-        if quantity > product.reserved_quantity:
-            raise ValidationError(
-                f"Cannot release {quantity} units: only "
-                f"{product.reserved_quantity} are currently reserved."
-            )
-
-        updated = self.repository.update(
-            product,
-            reserved_quantity=product.reserved_quantity - quantity,
-            updated_by=current_user.id,
-        )
-        self._sync_status_with_stock(updated)
-        self.db.commit()
-        return updated
+    #
+    # NOTE: Stock management has been moved to the Inventory module.
+    # All stock mutations (add, remove, adjust, reserve, release,
+    # transfer) are handled by StockMovementService in
+    # modules/inventory/stock_movement_service.py.
+    #
+    # The Product module no longer stores stock_quantity or
+    # reserved_quantity. Product-level stock aggregates are available
+    # via ProductInventoryService in modules/inventory/.
+    #
+    # To maintain backward compatibility for existing callers, this
+    # section provides a delegation method. New code should call the
+    # Inventory module directly.
 
     # --- Internal helpers ---------------------------------------------------
 
@@ -402,58 +265,29 @@ class ProductService:
             raise NotFoundError(f"No product found with id '{product_id}'.")
         return product
 
-    def _get_modifiable_product_or_404(self, product_id: uuid.UUID) -> Product:
-        """Like `_get_product_or_404`, but additionally enforces "archived
-        products cannot be modified" — shared by all four stock
-        operations, since a stock change is exactly the kind of
-        modification that rule is meant to block."""
+    def _sync_product_status_from_inventory(
+        self, product_id: uuid.UUID
+    ) -> None:
+        """
+        Derives the product's status based on available stock from the
+        Inventory module.
+
+        If a product is ACTIVE but has zero available stock across all
+        warehouses, it transitions to OUT_OF_STOCK. If OUT_OF_STOCK and
+        stock becomes available, it transitions back to ACTIVE.
+
+        Uses ProductInventoryService to check aggregate inventory.
+        """
         product = self._get_product_or_404(product_id)
-        if product.status == ProductStatus.ARCHIVED:
-            raise ConflictError(
-                "This product is archived and its stock can no longer be adjusted."
-            )
-        return product
-
-    @staticmethod
-    def _validate_positive_quantity(quantity: int) -> None:
-        """Defensive guard shared by all four stock operations. The
-        `StockAdjustmentRequest` schema already enforces `quantity > 0`
-        for requests arriving through the HTTP layer, but these service
-        methods are public and may be called directly by other modules
-        (e.g. a future Orders service) that bypass that schema entirely."""
-        if quantity <= 0:
-            raise ValidationError("Quantity must be a positive integer.")
-
-    @staticmethod
-    def _validate_tracks_inventory(product: Product) -> None:
-        """Products with `track_inventory=False` (e.g. digital goods,
-        made-to-order items) opt out of the stock system entirely — any
-        stock operation attempted against one is a validation error, not
-        something that should be silently ignored or silently applied to
-        numbers that don't mean anything for that product."""
-        if not product.track_inventory:
-            raise ValidationError(
-                "This product does not track inventory; stock adjustments are not applicable."
-            )
-
-    @staticmethod
-    def _sync_status_with_stock(product: Product) -> None:
-        """
-        Keeps `status` consistent with actual available stock for
-        products currently ACTIVE or OUT_OF_STOCK, mutating the
-        already-persisted `product` in place (the caller is responsible
-        for committing).
-
-        Business reasoning: this only ever moves a product between
-        ACTIVE and OUT_OF_STOCK — it never touches DRAFT (a product
-        being authored shouldn't "go active" just because someone
-        stocked it) or ARCHIVED (a terminal state, and unreachable here
-        anyway since every stock-mutating path already rejects archived
-        products via `_get_modifiable_product_or_404`).
-        """
         if not product.track_inventory:
             return
-        if product.status == ProductStatus.ACTIVE and product.available_quantity <= 0:
-            product.status = ProductStatus.OUT_OF_STOCK
-        elif product.status == ProductStatus.OUT_OF_STOCK and product.available_quantity > 0:
-            product.status = ProductStatus.ACTIVE
+        if product.status in (ProductStatus.DRAFT, ProductStatus.ARCHIVED):
+            return
+
+        inv_svc = ProductInventoryService(self.db)
+        is_oos = inv_svc.check_product_out_of_stock(product_id)
+
+        if product.status == ProductStatus.ACTIVE and is_oos:
+            self.repository.update(product, status=ProductStatus.OUT_OF_STOCK)
+        elif product.status == ProductStatus.OUT_OF_STOCK and not is_oos:
+            self.repository.update(product, status=ProductStatus.ACTIVE)

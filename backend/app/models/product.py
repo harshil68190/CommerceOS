@@ -101,11 +101,6 @@ class Product(Base):
         # which is exactly the kind of naming inconsistency the shared
         # convention exists to prevent.
         CheckConstraint("price > 0", name="price_positive"),
-        CheckConstraint("stock_quantity >= 0", name="stock_non_negative"),
-        CheckConstraint(
-            "reserved_quantity >= 0 AND reserved_quantity <= stock_quantity",
-            name="reserved_within_stock",
-        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
@@ -124,8 +119,12 @@ class Product(Base):
     compare_at_price: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
     currency: Mapped[str] = mapped_column(String(3), default="USD", nullable=False)
 
-    stock_quantity: Mapped[int] = mapped_column(default=0, nullable=False)
-    reserved_quantity: Mapped[int] = mapped_column(default=0, nullable=False)
+    # NOTE: stock_quantity and reserved_quantity were removed from this
+    # model in the inventory module milestone. Inventory is now the
+    # single source of truth — see modules/inventory/models.py.
+    # Product exposes total_stock and available_stock as computed
+    # properties derived from the Inventory table via
+    # ProductInventoryService.
 
     weight: Mapped[Decimal | None] = mapped_column(Numeric(10, 3), nullable=True)
 
@@ -159,15 +158,6 @@ class Product(Base):
     updated_at: Mapped[datetime] = mapped_column(
         server_default=func.now(), onupdate=func.now(), nullable=False
     )
-
-    @property
-    def available_quantity(self) -> int:
-        """Stock actually available to sell right now (on-hand minus
-        already-reserved). Exposed as a computed property rather than a
-        stored column so it can never drift out of sync with
-        `stock_quantity`/`reserved_quantity` — it's always derived, never
-        independently persisted."""
-        return self.stock_quantity - self.reserved_quantity
 
     def __repr__(self) -> str:
         return f"<Product id={self.id} sku={self.sku} status={self.status}>"

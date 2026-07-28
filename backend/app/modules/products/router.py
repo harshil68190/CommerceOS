@@ -32,7 +32,6 @@ from app.schemas.product import (
     CreateProductRequest,
     ProductListResponse,
     ProductResponse,
-    StockAdjustmentRequest,
     UpdateProductRequest,
 )
 
@@ -116,25 +115,6 @@ def archive_product(
 ) -> ProductResponse:
     """Moves a product to ARCHIVED — a one-way, terminal transition."""
     product = service.archive_product(product_id, current_user)
-    return ProductResponse.model_validate(product)
-
-
-@router.patch(
-    "/{product_id}/stock",
-    response_model=ProductResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Adjust product stock (increase, decrease, reserve, or release)",
-)
-def adjust_stock(
-    product_id: uuid.UUID,
-    payload: StockAdjustmentRequest,
-    current_user: User = Depends(require_catalog_manager),
-    service: ProductService = Depends(get_product_service),
-) -> ProductResponse:
-    """Applies one stock movement (`payload.operation`) to a product.
-    See `ProductService.adjust_stock` and the four dedicated stock
-    methods it dispatches to."""
-    product = service.adjust_stock(product_id, payload, current_user)
     return ProductResponse.model_validate(product)
 
 

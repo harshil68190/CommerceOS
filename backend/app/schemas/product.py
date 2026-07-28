@@ -30,8 +30,6 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 from math import ceil
-from typing import Literal
-
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.product import ProductStatus
@@ -57,7 +55,10 @@ class CreateProductRequest(BaseModel):
     compare_at_price: Decimal | None = Field(default=None, gt=0, decimal_places=2)
     currency: str = Field(default="USD", min_length=3, max_length=3)
 
-    stock_quantity: int = Field(default=0, ge=0)
+    # NOTE: stock_quantity is no longer accepted here. Inventory is
+    # managed exclusively through the Inventory module. Use
+    # POST /inventory/stock/add to set initial stock levels.
+
     weight: Decimal | None = Field(default=None, gt=0, decimal_places=3)
 
     status: ProductStatus = Field(default=ProductStatus.DRAFT)
@@ -111,6 +112,11 @@ class UpdateProductRequest(BaseModel):
     is_featured: bool | None = None
     track_inventory: bool | None = None
 
+    # NOTE: stock_quantity and reserved_quantity are not updatable here.
+    # Inventory is managed through the Inventory module
+    # (POST /inventory/stock/add, etc.). These fields were removed from
+    # the Product model and database in the inventory module milestone.
+
     @field_validator("status")
     @classmethod
     def _status_must_be_editable(cls, value: ProductStatus | None) -> ProductStatus | None:
@@ -125,21 +131,6 @@ class UpdateProductRequest(BaseModel):
     @classmethod
     def _currency_must_be_uppercase(cls, value: str | None) -> str | None:
         return value.upper() if value is not None else None
-
-
-class StockAdjustmentRequest(BaseModel):
-    """
-    Request body for PATCH /products/{id}/stock (admin/manager only).
-
-    A single endpoint covers all four stock operations (increase,
-    decrease, reserve, release), disambiguated by `operation` — this
-    mirrors how `ProductService` exposes four distinct, individually
-    documented methods rather than one ambiguous "set stock to N" call
-    that would lose the business meaning of *why* the stock changed.
-    """
-
-    operation: Literal["increase", "decrease", "reserve", "release"]
-    quantity: int = Field(gt=0)
 
 
 class ProductResponse(BaseModel):
@@ -161,9 +152,11 @@ class ProductResponse(BaseModel):
     compare_at_price: Decimal | None
     currency: str
 
-    stock_quantity: int
-    reserved_quantity: int
-    available_quantity: int  # computed property on the ORM model
+    # NOTE: stock_quantity, reserved_quantity, and available_quantity
+    # were removed from ProductResponse in the inventory module milestone.
+    # Stock data is now managed and served by the Inventory module
+    # (see modules/inventory/schemas.py). Product-level stock aggregates
+    # are available via GET /inventory/products/{product_id}.
 
     weight: Decimal | None
 

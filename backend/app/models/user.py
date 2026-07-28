@@ -33,7 +33,7 @@ from app.db.base import Base
 
 class UserRole(str, enum.Enum):
     """
-    The three account roles CommerceOS supports, per the architecture
+    The account roles CommerceOS supports, per the architecture
     doc's decision to use a single `users` table with a `role` column
     rather than separate customer/seller/admin tables — a role is an
     attribute of a user, not a fundamentally different entity.
@@ -42,10 +42,19 @@ class UserRole(str, enum.Enum):
     serializes as a plain string in JSON responses and compares equal to
     its string value (`UserRole.ADMIN == "admin"`), which keeps Pydantic
     schemas and JWT claims (which must be plain strings/JSON) simple.
+
+    Roles:
+    - ADMIN: full system access.
+    - SELLER: manages product listings (catalog management).
+    - INVENTORY_MANAGER: manages inventory, warehouses, and stock operations
+      (added in the inventory module milestone).
+    - CUSTOMER: standard end-user role (read-only access to catalog,
+      can place orders).
     """
 
     ADMIN = "admin"
     SELLER = "seller"
+    INVENTORY_MANAGER = "inventory_manager"
     CUSTOMER = "customer"
 
 
