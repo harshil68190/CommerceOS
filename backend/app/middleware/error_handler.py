@@ -90,7 +90,7 @@ def register_exception_handlers(app: FastAPI) -> None:
             errors.append(err)
 
         return JSONResponse(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             content=_error_envelope(
                 error_code="REQUEST_VALIDATION_ERROR",
                 message="The request contained invalid data.",

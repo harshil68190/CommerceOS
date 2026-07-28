@@ -14,6 +14,7 @@ before reading `target_metadata`, specifically so this file is the single
 place new models get registered as the schema grows.
 """
 
+from app.models.product import Product, ProductStatus
 from app.models.user import User, UserRole
 
-__all__ = ["User", "UserRole"]
+__all__ = ["User", "UserRole", "Product", "ProductStatus"]

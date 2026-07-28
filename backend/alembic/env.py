@@ -52,7 +52,10 @@ target_metadata = Base.metadata
 # relying on alembic.ini (keeps exactly one source of truth for DB
 # connection info: environment variables via Settings).
 settings = get_settings()
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+config.set_main_option(
+    "sqlalchemy.url",
+    settings.DATABASE_URL.replace("%", "%%"),
+)
 
 
 def run_migrations_offline() -> None:

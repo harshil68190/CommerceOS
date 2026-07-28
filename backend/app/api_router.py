@@ -9,8 +9,8 @@ includes individual module routers directly. This means adding a new
 feature module in a future milestone (auth, catalog, orders, ...) is a
 one-line change here, and `main.py` never needs to grow.
 
-This milestone defines only the health check endpoint required by the
-foundation spec:
+The health check endpoint required by the foundation milestone lives
+directly here:
 
     GET /api/v1/health -> {"status": "healthy"}
 
@@ -18,16 +18,24 @@ Health checks are deliberately NOT placed inside `app/modules/` — they
 are infrastructure/ops concerns (used by Docker healthchecks, load
 balancers, and orchestrators), not a commerce business module, so they
 live directly alongside the router aggregator instead.
+
+Milestone 3 added the first real feature module router: `auth`.
+Milestone 4 adds the second: `products`.
 """
 
 from fastapi import APIRouter
 
 from app.core.config import get_settings
 from app.modules.auth.router import router as auth_router
+from app.modules.products.router import router as products_router
+
 settings = get_settings()
 
 api_router = APIRouter(prefix=settings.API_V1_PREFIX)
+
 api_router.include_router(auth_router)
+api_router.include_router(products_router)
+
 
 @api_router.get("/health", tags=["health"], summary="Liveness check")
 def health_check() -> dict[str, str]:

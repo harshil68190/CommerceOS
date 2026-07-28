@@ -14,14 +14,15 @@ autogenerate diffs noisy/unstable. Fixing an explicit naming convention up
 front means every future migration is deterministic and every constraint
 name is predictable and greppable.
 
-This milestone intentionally defines NO models. `Base.metadata` is empty
-until the first model is added in a future milestone — Alembic is already
-wired to read from it (see `alembic/env.py`), so the first `alembic
-revision --autogenerate` will pick up new models automatically.
+Every model in `app/models/` (User, Product, and future models) inherits
+from this `Base` and is registered on `Base.metadata` via
+`app/models/__init__.py`, which Alembic reads from (see `alembic/env.py`)
+to autogenerate migrations.
 """
 
 from sqlalchemy import MetaData
 from sqlalchemy.orm import DeclarativeBase
+
 # Standard, widely-used naming convention for constraints/indexes.
 # Keeping this consistent across the whole schema is what makes Alembic
 # autogenerate diffs clean and migration rollbacks safe.
