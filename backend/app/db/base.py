@@ -22,7 +22,6 @@ revision --autogenerate` will pick up new models automatically.
 
 from sqlalchemy import MetaData
 from sqlalchemy.orm import DeclarativeBase
-
 # Standard, widely-used naming convention for constraints/indexes.
 # Keeping this consistent across the whole schema is what makes Alembic
 # autogenerate diffs clean and migration rollbacks safe.

@@ -23,11 +23,11 @@ live directly alongside the router aggregator instead.
 from fastapi import APIRouter
 
 from app.core.config import get_settings
-
+from app.modules.auth.router import router as auth_router
 settings = get_settings()
 
 api_router = APIRouter(prefix=settings.API_V1_PREFIX)
-
+api_router.include_router(auth_router)
 
 @api_router.get("/health", tags=["health"], summary="Liveness check")
 def health_check() -> dict[str, str]:

@@ -78,16 +78,27 @@ def register_exception_handlers(app: FastAPI) -> None:
         request: Request, exc: RequestValidationError
     ) -> JSONResponse:
         logger.info("Request validation failed: %s", exc.errors())
+
+        errors = []
+
+        for err in exc.errors():
+            err = dict(err)
+
+            if isinstance(err.get("input"), bytes):
+                err["input"] = err["input"].decode("utf-8", errors="replace")
+
+            errors.append(err)
+
         return JSONResponse(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             content=_error_envelope(
                 error_code="REQUEST_VALIDATION_ERROR",
                 message="The request contained invalid data.",
-                details={"errors": exc.errors()},
+                details={"errors": errors},
                 request=request,
             ),
         )
-
+    
     @app.exception_handler(Exception)
     async def handle_unexpected_exception(request: Request, exc: Exception) -> JSONResponse:
         # Full traceback goes to logs for debugging; the client only ever

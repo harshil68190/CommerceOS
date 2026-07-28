@@ -1,0 +1,4 @@
+# Keeps this directory present in git even though no migrations exist
+# yet in this milestone. The first migration will be generated once the
+# first ORM models are added (a future milestone) via:
+#   alembic revision --autogenerate -m "create initial tables"
