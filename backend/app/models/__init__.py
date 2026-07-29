@@ -17,6 +17,7 @@ place new models get registered as the schema grows.
 from app.models.product import Product, ProductStatus
 from app.models.user import User, UserRole
 from app.modules.inventory.models import Inventory, InventoryTransaction, Warehouse
+from app.modules.orders.models import Order, OrderItem
 
 __all__ = [
     "User",
@@ -26,4 +27,6 @@ __all__ = [
     "Warehouse",
     "Inventory",
     "InventoryTransaction",
+    "Order",
+    "OrderItem",
 ]
