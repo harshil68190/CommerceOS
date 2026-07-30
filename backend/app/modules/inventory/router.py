@@ -340,6 +340,7 @@ def add_stock(
     payload: AddStockRequest,
     current_user: User = Depends(require_inventory_manager),
     stock_service: StockMovementService = Depends(get_stock_movement_service),
+    db: Session = Depends(get_db),
 ) -> StockMovementResponse:
     """
     Adds physical stock to a product in a warehouse.
@@ -360,6 +361,7 @@ def add_stock(
         reference_number=payload.reference_number,
         notes=payload.notes,
     )
+    db.commit()
     return StockMovementResponse(
         inventory=InventoryResponse.model_validate(inventory),
         transaction=InventoryTransactionResponse.model_validate(transaction),
@@ -376,6 +378,7 @@ def remove_stock(
     payload: RemoveStockRequest,
     current_user: User = Depends(require_inventory_manager),
     stock_service: StockMovementService = Depends(get_stock_movement_service),
+    db: Session = Depends(get_db),
 ) -> StockMovementResponse:
     """
     Removes physical stock from a product in a warehouse.
@@ -398,6 +401,7 @@ def remove_stock(
         reference_number=payload.reference_number,
         notes=payload.notes,
     )
+    db.commit()
     return StockMovementResponse(
         inventory=InventoryResponse.model_validate(inventory),
         transaction=InventoryTransactionResponse.model_validate(transaction),
@@ -414,6 +418,7 @@ def adjust_stock(
     payload: AdjustStockRequest,
     current_user: User = Depends(require_inventory_manager),
     stock_service: StockMovementService = Depends(get_stock_movement_service),
+    db: Session = Depends(get_db),
 ) -> StockMovementResponse:
     """
     Sets the exact stock quantity for a product in a warehouse.
@@ -433,6 +438,7 @@ def adjust_stock(
         reference_number=payload.reference_number,
         notes=payload.notes,
     )
+    db.commit()
     return StockMovementResponse(
         inventory=InventoryResponse.model_validate(inventory),
         transaction=InventoryTransactionResponse.model_validate(transaction),
@@ -454,6 +460,7 @@ def reserve_stock(
     payload: ReserveStockRequest,
     current_user: User = Depends(require_inventory_manager),
     stock_service: StockMovementService = Depends(get_stock_movement_service),
+    db: Session = Depends(get_db),
 ) -> StockMovementResponse:
     """
     Reserves stock for a pending order (e.g. items added to cart).
@@ -473,6 +480,7 @@ def reserve_stock(
         reference_number=payload.reference_number,
         notes=payload.notes,
     )
+    db.commit()
     return StockMovementResponse(
         inventory=InventoryResponse.model_validate(inventory),
         transaction=InventoryTransactionResponse.model_validate(transaction),
@@ -489,6 +497,7 @@ def release_stock(
     payload: ReleaseStockRequest,
     current_user: User = Depends(require_inventory_manager),
     stock_service: StockMovementService = Depends(get_stock_movement_service),
+    db: Session = Depends(get_db),
 ) -> StockMovementResponse:
     """
     Releases previously reserved stock back to available.
@@ -508,6 +517,7 @@ def release_stock(
         reference_number=payload.reference_number,
         notes=payload.notes,
     )
+    db.commit()
     return StockMovementResponse(
         inventory=InventoryResponse.model_validate(inventory),
         transaction=InventoryTransactionResponse.model_validate(transaction),
@@ -524,6 +534,7 @@ def confirm_reservation(
     payload: ConfirmReservationRequest,
     current_user: User = Depends(require_inventory_manager),
     stock_service: StockMovementService = Depends(get_stock_movement_service),
+    db: Session = Depends(get_db),
 ) -> StockMovementResponse:
     """
     Confirms a reservation and converts it into an actual stock deduction.
@@ -546,6 +557,7 @@ def confirm_reservation(
         reference_number=payload.reference_number,
         notes=payload.notes,
     )
+    db.commit()
     return StockMovementResponse(
         inventory=InventoryResponse.model_validate(inventory),
         transaction=InventoryTransactionResponse.model_validate(transaction),
@@ -567,6 +579,7 @@ def transfer_stock(
     payload: TransferRequest,
     current_user: User = Depends(require_inventory_manager),
     stock_service: StockMovementService = Depends(get_stock_movement_service),
+    db: Session = Depends(get_db),
 ) -> dict:
     """
     Transfers stock from one warehouse to another.
@@ -594,6 +607,7 @@ def transfer_stock(
         reference_number=payload.reference_number,
         notes=payload.notes,
     )
+    db.commit()
     return {
         "success": True,
         "correlation_id": tx_out.correlation_id,

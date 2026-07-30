@@ -16,7 +16,6 @@ Route structure:
   DELETE /orders/{id}                     -- Delete order (pending only, admin)
   PATCH  /orders/{id}/cancel              -- Cancel order
   PATCH  /orders/{id}/confirm-payment     -- Confirm payment
-  PATCH  /orders/{id}/process             -- Start processing
   PATCH  /orders/{id}/ship                -- Ship order
   PATCH  /orders/{id}/deliver             -- Deliver order
   PATCH  /orders/{id}/return              -- Return order
@@ -34,6 +33,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, Query, status
 
 from app.models.user import User
+from app.modules.orders.constants import OrderStatus, PaymentStatus
 from app.modules.orders.dependencies import (
     get_order_service,
 )
@@ -109,11 +109,11 @@ def create_order(
 )
 def list_orders(
     customer_id: uuid.UUID | None = Query(default=None),
-    status_filter: str | None = Query(
+    status_filter: OrderStatus | None = Query(
         default=None, alias="status",
         description="Filter by order status",
     ),
-    payment_status: str | None = Query(default=None),
+    payment_status: PaymentStatus | None = Query(default=None),
     sort: SortOption | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
@@ -154,7 +154,7 @@ def list_orders(
     summary="List own orders (customer)",
 )
 def list_my_orders(
-    status_filter: str | None = Query(
+    status_filter: OrderStatus | None = Query(
         default=None, alias="status",
         description="Filter by order status",
     ),
@@ -283,7 +283,7 @@ def cancel_order(
     """
     Cancels an order. Releases reserved inventory.
 
-    Only allowed before shipping (PENDING, CONFIRMED, PROCESSING).
+    Only allowed while stock is reserved (PENDING).
 
     Accessible to ADMIN and CUSTOMER (own orders).
     """
@@ -336,41 +336,6 @@ def confirm_payment(
 
 
 # =========================================================================
-# Start Processing
-# =========================================================================
-
-
-@router.patch(
-    "/{order_id}/process",
-    response_model=OrderStatusTransitionResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Start processing an order",
-)
-def process_order(
-    order_id: uuid.UUID,
-    current_user: User = Depends(require_order_shipping),
-    service=Depends(get_order_service),
-) -> OrderStatusTransitionResponse:
-    """
-    Starts warehouse processing.
-
-    CONFIRMED -> PROCESSING.
-
-    Accessible to ADMIN and SELLER.
-    """
-    order = service.process_order(order_id, current_user)
-    return OrderStatusTransitionResponse(
-        id=order.id,
-        order_number=order.order_number,
-        status=order.status,
-        payment_status=order.payment_status,
-        version=order.version,
-        updated_at=order.updated_at,
-        message="Order is now being processed.",
-    )
-
-
-# =========================================================================
 # Ship Order
 # =========================================================================
 
@@ -389,7 +354,7 @@ def ship_order(
     """
     Marks order as shipped (carrier picked up).
 
-    PROCESSING -> SHIPPED.
+    CONFIRMED -> SHIPPED.
 
     Accessible to ADMIN and SELLER.
     """

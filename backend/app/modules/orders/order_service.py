@@ -113,6 +113,9 @@ class OrderService:
 
         # Calculate monetary fields
         subtotal = sum(item_data["line_total"] for item_data in items_data)
+        if payload.discount > subtotal:
+            logger.warning("Order creation rejected: discount exceeds subtotal for customer=%s", current_user.id)
+            raise ValidationError("Discount cannot exceed the order subtotal.")
         tax = (subtotal * _TAX_RATE).quantize(Decimal("0.01"))
         total = subtotal + tax + payload.shipping_cost - payload.discount
         total = max(total, Decimal("0.00"))
@@ -202,6 +205,9 @@ class OrderService:
         if recalc_total:
             shipping_cost = updates.get("shipping_cost", order.shipping_cost)
             discount = updates.get("discount", order.discount)
+            if discount > order.subtotal:
+                logger.warning("Order update rejected: discount exceeds subtotal for order=%s", order.order_number)
+                raise ValidationError("Discount cannot exceed the order subtotal.")
             total = order.subtotal + order.tax + shipping_cost - discount
             updates["total"] = max(total, Decimal("0.00"))
 
@@ -261,28 +267,11 @@ class OrderService:
         return order
 
     # =========================================================================
-    # Process (start packing)
-    # =========================================================================
-
-    def process_order(self, order_id: uuid.UUID, current_user: User) -> Order:
-        """CONFIRMED -> PROCESSING. Warehouse packing."""
-        order = self._get_order_or_404(order_id)
-        self._validate_transition(order, OrderStatus.PROCESSING)
-
-        order = self.order_repo.update(
-            order,
-            status=OrderStatus.PROCESSING,
-            updated_by=current_user.id,
-        )
-        self.db.commit()
-        return order
-
-    # =========================================================================
     # Ship
     # =========================================================================
 
     def ship_order(self, order_id: uuid.UUID, current_user: User) -> Order:
-        """PROCESSING -> SHIPPED. Carrier picked up."""
+        """CONFIRMED -> SHIPPED. Carrier picked up."""
         order = self._get_order_or_404(order_id)
         self._validate_transition(order, OrderStatus.SHIPPED)
 
@@ -633,7 +622,7 @@ class OrderService:
 
         Called during cancellation or deletion of a pending order.
         Only releases if the order currently has reserved stock
-        (PENDING, CONFIRMED, or PROCESSING status).
+        (PENDING status).
         """
         if order.status not in STATUSES_WITH_RESERVATION:
             return

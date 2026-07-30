@@ -48,7 +48,7 @@ class Order(Base):
     The core order entity — a customer's purchase request.
 
     Every order follows a strict lifecycle enforced by OrderService:
-    PENDING -> CONFIRMED -> PROCESSING -> SHIPPED -> DELIVERED
+    PENDING -> CONFIRMED -> SHIPPED -> DELIVERED
     Cancellation is only allowed before SHIPPED.
     Returns/Refunds are only allowed after DELIVERED.
 

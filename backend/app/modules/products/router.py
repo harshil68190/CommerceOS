@@ -52,6 +52,60 @@ def get_product_service(db: Session = Depends(get_db)) -> ProductService:
 # --- Admin / catalog-manager routes ---------------------------------------------------
 
 
+@router.get(
+    "/admin",
+    response_model=ProductListResponse,
+    status_code=status.HTTP_200_OK,
+    summary="List all products including drafts (admin only)",
+)
+def list_all_products(
+    category: str | None = Query(default=None),
+    brand: str | None = Query(default=None),
+    status: str | None = Query(default=None, description="Filter by status: draft, active, archived, out_of_stock"),
+    featured: bool | None = Query(default=None),
+    price_min: Decimal | None = Query(default=None, ge=0),
+    price_max: Decimal | None = Query(default=None, ge=0),
+    sort: SortOption | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    current_user: User = Depends(require_catalog_manager),
+    service: ProductService = Depends(get_product_service),
+) -> ProductListResponse:
+    """
+    Lists ALL products regardless of status — including drafts, archived, and out-of-stock.
+
+    Restricted to admins and catalog managers. Provides full visibility
+    into the entire product catalog for management purposes.
+    """
+    from app.models.product import ProductStatus
+
+    status_enum = None
+    if status:
+        try:
+            status_enum = ProductStatus(status)
+        except ValueError:
+            status_enum = None
+
+    filters = ProductFilters(
+        category=category,
+        brand=brand,
+        status=status_enum,
+        is_featured=featured,
+        price_min=price_min,
+        price_max=price_max,
+        sort=sort,
+    )
+    items, total = service.list_products_admin(
+        filters=filters, page=page, page_size=page_size
+    )
+    return ProductListResponse.build(
+        items=[ProductResponse.model_validate(p) for p in items],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
+
+
 @router.post(
     "",
     response_model=ProductResponse,

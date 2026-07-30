@@ -33,6 +33,7 @@ module raised them.
 import logging
 
 from fastapi import FastAPI, Request, status
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
@@ -87,7 +88,10 @@ def register_exception_handlers(app: FastAPI) -> None:
             if isinstance(err.get("input"), bytes):
                 err["input"] = err["input"].decode("utf-8", errors="replace")
 
-            errors.append(err)
+            # Pydantic includes the original ValueError in ``ctx`` for
+            # validator failures. JSONResponse cannot serialize exception
+            # objects, so normalize the complete error payload first.
+            errors.append(jsonable_encoder(err, custom_encoder={Exception: str}))
 
         return JSONResponse(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

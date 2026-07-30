@@ -17,8 +17,7 @@ class OrderStatus(str, enum.Enum):
 
     The status transition map (enforced in OrderService) is:
         PENDING    → CONFIRMED, CANCELLED
-        CONFIRMED  → PROCESSING, CANCELLED
-        PROCESSING → SHIPPED, CANCELLED
+        CONFIRMED  → SHIPPED
         SHIPPED    → DELIVERED
         DELIVERED  → RETURNED
         RETURNED   → REFUNDED
@@ -27,7 +26,6 @@ class OrderStatus(str, enum.Enum):
 
     PENDING:    Stock reserved. Awaiting payment.
     CONFIRMED:  Payment successful.
-    PROCESSING: Warehouse packing.
     SHIPPED:    Carrier picked up.
     DELIVERED:  Delivered to customer.
     CANCELLED:  Cancelled before shipping (inventory released).
@@ -37,7 +35,6 @@ class OrderStatus(str, enum.Enum):
 
     PENDING = "pending"
     CONFIRMED = "confirmed"
-    PROCESSING = "processing"
     SHIPPED = "shipped"
     DELIVERED = "delivered"
     CANCELLED = "cancelled"
@@ -66,8 +63,7 @@ class PaymentStatus(str, enum.Enum):
 # Map of valid transitions: current_status -> set of allowed next statuses.
 ORDER_STATUS_TRANSITIONS: dict[OrderStatus, set[OrderStatus]] = {
     OrderStatus.PENDING: {OrderStatus.CONFIRMED, OrderStatus.CANCELLED},
-    OrderStatus.CONFIRMED: {OrderStatus.PROCESSING, OrderStatus.CANCELLED},
-    OrderStatus.PROCESSING: {OrderStatus.SHIPPED, OrderStatus.CANCELLED},
+    OrderStatus.CONFIRMED: {OrderStatus.SHIPPED},
     OrderStatus.SHIPPED: {OrderStatus.DELIVERED},
     OrderStatus.DELIVERED: {OrderStatus.RETURNED},
     OrderStatus.RETURNED: {OrderStatus.REFUNDED},
@@ -78,14 +74,10 @@ ORDER_STATUS_TRANSITIONS: dict[OrderStatus, set[OrderStatus]] = {
 # Statuses where inventory IS reserved (cancellation must release stock).
 STATUSES_WITH_RESERVATION: set[OrderStatus] = {
     OrderStatus.PENDING,
-    OrderStatus.CONFIRMED,
-    OrderStatus.PROCESSING,
 }
 
 # Statuses that allow cancellation.
 CANCELLABLE_STATUSES: set[OrderStatus] = {
     OrderStatus.PENDING,
-    OrderStatus.CONFIRMED,
-    OrderStatus.PROCESSING,
 }
 

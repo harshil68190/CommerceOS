@@ -15,6 +15,7 @@ No SQL lives here — every persistence operation goes through
 only places that know these turn into HTTP status codes.
 """
 
+import logging
 import uuid
 from decimal import Decimal
 
@@ -36,6 +37,7 @@ from app.schemas.product import CreateProductRequest, UpdateProductRequest
 # place if it's ever relaxed (e.g. to also show OUT_OF_STOCK for
 # transparency).
 _CUSTOMER_VISIBLE_STATUSES = (ProductStatus.ACTIVE,)
+logger = logging.getLogger(__name__)
 
 
 class ProductService:
@@ -92,6 +94,7 @@ class ProductService:
 
         created = self.repository.create(product)
         self.db.commit()
+        logger.info("Product created: product=%s sku=%s user=%s", created.id, created.sku, current_user.id)
         return created
 
     # --- Update ---------------------------------------------------
@@ -204,7 +207,22 @@ class ProductService:
             raise NotFoundError(f"No product found with slug '{slug}'.")
         return product
 
-    # --- Search / list ---------------------------------------------------
+# --- Search / list ---------------------------------------------------
+
+    def list_products_admin(
+        self, *, filters: ProductFilters, page: int, page_size: int
+    ) -> tuple[list[Product], int]:
+        """
+        Admin-facing catalog listing (GET /products/admin).
+
+        Shows ALL products regardless of status — no status filtering
+        is applied, so admins can see drafts, archived, and out-of-stock
+        products alongside active ones.
+        """
+        # Do NOT override the status filter — let the caller pass the
+        # status they want to see. If no status is specified, all
+        # statuses are shown.
+        return self.repository.list_paginated(filters=filters, page=page, page_size=page_size)
 
     def list_products_for_customer(
         self, *, filters: ProductFilters, page: int, page_size: int

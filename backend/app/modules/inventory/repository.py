@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.models.product import Product
 from app.modules.inventory.constants import InventoryTransactionType, StockStatus
+from app.modules.inventory.exceptions import ConcurrencyConflictError
 from app.modules.inventory.models import Inventory, InventoryTransaction, Warehouse
 
 
@@ -252,15 +253,12 @@ class InventoryRepository:
         if "version" in fields:
             fields.pop("version")
 
-        fields["version"] = inventory.version + 1
-        fields["last_stock_update"] = datetime.utcnow()
-
-        for field_name, value in fields.items():
-            setattr(inventory, field_name, value)
-
-        self.db.flush()
+        expected_version = inventory.version
+        if not self.update_with_version_check(inventory.id, expected_version, **fields):
+            raise ConcurrencyConflictError(
+                f"Inventory {inventory.id} was modified by another request."
+            )
         self.db.refresh(inventory)
-
         return inventory
 
     def update_with_version_check(

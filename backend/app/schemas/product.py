@@ -61,7 +61,7 @@ class CreateProductRequest(BaseModel):
 
     weight: Decimal | None = Field(default=None, gt=0, decimal_places=3)
 
-    status: ProductStatus = Field(default=ProductStatus.DRAFT)
+    status: ProductStatus = Field(default=ProductStatus.ACTIVE)
     is_featured: bool = False
     track_inventory: bool = True
 

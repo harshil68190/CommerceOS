@@ -139,7 +139,7 @@ class Product(Base):
             # the API/JSON responses use everywhere else.
             values_callable=lambda enum_cls: [member.value for member in enum_cls],
         ),
-        default=ProductStatus.DRAFT,
+        default=ProductStatus.ACTIVE,
         index=True,
         nullable=False,
     )
