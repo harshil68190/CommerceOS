@@ -32,7 +32,7 @@ module raised them.
 
 import logging
 
-from fastapi import FastAPI, Request, status
+from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -52,6 +52,20 @@ def _error_envelope(
         "details": details,
         "request_id": getattr(request.state, "request_id", "-"),
     }
+
+
+def _error_code_from_http_status(status_code: int) -> str:
+    if status_code == status.HTTP_401_UNAUTHORIZED:
+        return "UNAUTHORIZED"
+    if status_code == status.HTTP_403_FORBIDDEN:
+        return "FORBIDDEN"
+    if status_code == status.HTTP_404_NOT_FOUND:
+        return "NOT_FOUND"
+    if status_code == status.HTTP_409_CONFLICT:
+        return "CONFLICT"
+    if status_code == status.HTTP_422_UNPROCESSABLE_ENTITY:
+        return "REQUEST_VALIDATION_ERROR"
+    return "HTTP_ERROR"
 
 
 def register_exception_handlers(app: FastAPI) -> None:
@@ -102,7 +116,26 @@ def register_exception_handlers(app: FastAPI) -> None:
                 request=request,
             ),
         )
-    
+
+    @app.exception_handler(HTTPException)
+    async def handle_http_exception(request: Request, exc: HTTPException) -> JSONResponse:
+        detail = exc.detail if isinstance(exc.detail, str) else "Request failed."
+        details = (
+            {"detail": exc.detail}
+            if exc.detail is not None and not isinstance(exc.detail, str)
+            else {}
+        )
+        return JSONResponse(
+            status_code=exc.status_code,
+            content=_error_envelope(
+                error_code=_error_code_from_http_status(exc.status_code),
+                message=detail,
+                details=details,
+                request=request,
+            ),
+            headers=exc.headers,
+        )
+
     @app.exception_handler(Exception)
     async def handle_unexpected_exception(request: Request, exc: Exception) -> JSONResponse:
         # Full traceback goes to logs for debugging; the client only ever

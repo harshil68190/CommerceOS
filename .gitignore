@@ -9,9 +9,7 @@ __pycache__/
 # Virtual environment
 .venv/
 .env
-
-TODO.md
-
+.env.test
 # IDE
 .vscode/
 .idea/
@@ -28,3 +26,14 @@ Thumbs.db
 
 node_modules/
 dist/
+
+# Coverage
+.coverage
+*.cover
+htmlcov/
+coverage.xml
+.pytest_cache/
+
+# Python cache
+__pycache__/
+*.pyc

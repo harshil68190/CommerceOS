@@ -17,6 +17,7 @@ We use pydantic-settings (Pydantic v2) so that:
     that file in production (containers inject real env vars instead).
 """
 
+import os
 from functools import lru_cache
 from typing import List
 
@@ -109,4 +110,6 @@ def get_settings() -> Settings:
     dependency injection: `settings: Settings = Depends(get_settings)`
     in routers, or a plain `get_settings()` call in non-request code.
     """
-    return Settings()
+    # Tests select their configuration explicitly through this variable.
+    # Production keeps the normal .env default.
+    return Settings(_env_file=os.getenv("COMMERCEOS_ENV_FILE", ".env"))
