@@ -32,6 +32,7 @@ from functools import wraps
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import NotFoundError, ValidationError
+from app.models.product import Product
 from app.modules.inventory.constants import InventoryTransactionType, StockStatus
 from app.modules.inventory.exceptions import (
     ConcurrencyConflictError,
@@ -71,6 +72,7 @@ def _atomic_movement(method):
             raise
     return wrapper
 
+
 class StockMovementService:
     """
     Central service for all inventory stock movements.
@@ -92,6 +94,7 @@ class StockMovementService:
     def add_stock(self, *, product_id, warehouse_id, quantity, current_user_id, reference_number=None, notes=None):
         self._validate_quantity(quantity)
         self._validate_warehouse_active(warehouse_id)
+        self._validate_product_exists(product_id)
         inventory = self.inventory_repo.get_for_update(product_id, warehouse_id)
         if inventory is None:
             inventory = Inventory(product_id=product_id, warehouse_id=warehouse_id, quantity=0, reserved_quantity=0, reorder_level=0, max_stock=0)
@@ -107,6 +110,7 @@ class StockMovementService:
     def remove_stock(self, *, product_id, warehouse_id, quantity, current_user_id, reason="adjustment", reference_number=None, notes=None):
         self._validate_quantity(quantity)
         self._validate_warehouse_active(warehouse_id)
+        self._validate_product_exists(product_id)
         inventory = self.inventory_repo.get_for_update(product_id, warehouse_id)
         if inventory is None:
             raise InventoryNotFoundError(f"No inventory record found for product {product_id} in warehouse {warehouse_id}.")
@@ -129,6 +133,7 @@ class StockMovementService:
         if new_quantity < 0:
             raise ValidationError("New quantity cannot be negative.")
         self._validate_warehouse_active(warehouse_id)
+        self._validate_product_exists(product_id)
         inventory = self.inventory_repo.get_for_update(product_id, warehouse_id)
         if inventory is None:
             raise InventoryNotFoundError(f"No inventory record found for product {product_id} in warehouse {warehouse_id}.")
@@ -146,6 +151,7 @@ class StockMovementService:
     def reserve_stock(self, *, product_id, warehouse_id, quantity, current_user_id, reference_number=None, notes=None):
         self._validate_quantity(quantity)
         self._validate_warehouse_active(warehouse_id)
+        self._validate_product_exists(product_id)
         inventory = self.inventory_repo.get_for_update(product_id, warehouse_id)
         if inventory is None:
             raise InventoryNotFoundError(f"No inventory record for product {product_id} in warehouse {warehouse_id}.")
@@ -163,6 +169,7 @@ class StockMovementService:
     def release_reservation(self, *, product_id, warehouse_id, quantity, current_user_id, reference_number=None, notes=None):
         self._validate_quantity(quantity)
         self._validate_warehouse_active(warehouse_id)
+        self._validate_product_exists(product_id)
         inventory = self.inventory_repo.get_for_update(product_id, warehouse_id)
         if inventory is None:
             raise InventoryNotFoundError(f"No inventory record for product {product_id} in warehouse {warehouse_id}.")
@@ -179,6 +186,7 @@ class StockMovementService:
     def confirm_reservation(self, *, product_id, warehouse_id, quantity, current_user_id, reference_number=None, notes=None):
         self._validate_quantity(quantity)
         self._validate_warehouse_active(warehouse_id)
+        self._validate_product_exists(product_id)
         inventory = self.inventory_repo.get_for_update(product_id, warehouse_id)
         if inventory is None:
             raise InventoryNotFoundError(f"No inventory record for product {product_id} in warehouse {warehouse_id}.")
@@ -199,6 +207,7 @@ class StockMovementService:
         self._validate_quantity(quantity)
         self._validate_warehouse_active(from_warehouse_id)
         self._validate_warehouse_active(to_warehouse_id)
+        self._validate_product_exists(product_id)
         source = self.inventory_repo.get_for_update(product_id, from_warehouse_id)
         if source is None:
             raise InventoryNotFoundError(f"No inventory for product {product_id} in source warehouse {from_warehouse_id}.")
@@ -238,6 +247,11 @@ class StockMovementService:
         warehouse = self.warehouse_repo.get_active_by_id(warehouse_id)
         if warehouse is None:
             raise NotFoundError(f"Warehouse {warehouse_id} not found or is inactive.")
+
+    def _validate_product_exists(self, product_id):
+        product = self.db.get(Product, product_id)
+        if product is None:
+            raise NotFoundError(f"Product {product_id} not found.")
 
     def _create_transaction(self, *, product_id, warehouse_id, transaction_type, quantity, previous_quantity, new_quantity, previous_reserved_quantity, new_reserved_quantity, reference_number=None, correlation_id=None, notes=None, created_by=None):
         transaction = InventoryTransaction(product_id=product_id, warehouse_id=warehouse_id, transaction_type=transaction_type, quantity=quantity, previous_quantity=previous_quantity, new_quantity=new_quantity, previous_reserved_quantity=previous_reserved_quantity, new_reserved_quantity=new_reserved_quantity, reference_number=reference_number, correlation_id=correlation_id, notes=notes, created_by=created_by)

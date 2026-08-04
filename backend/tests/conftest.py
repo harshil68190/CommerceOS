@@ -23,7 +23,7 @@ from alembic.config import Config
 from fastapi.testclient import TestClient
 from sqlalchemy import event, text
 from sqlalchemy.engine import make_url
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 # Must be set before importing app modules that read settings at import time.
 os.environ["COMMERCEOS_ENV_FILE"] = ".env.test"
@@ -40,6 +40,55 @@ from app.modules.orders.constants import OrderStatus, PaymentStatus
 from app.modules.orders.models import Order, OrderItem
 
 DEFAULT_TEST_PASSWORD = "Str0ng!Pass1"
+
+
+class FlushOnlySession(Session):
+    """
+    Test-only Session subclass whose commit() flushes instead of releasing
+    the outer savepoint.
+
+    Why this exists
+    ---------------
+    The app's Inventory router (and the StockMovementService behind it)
+    call ``db.commit()`` after a stock movement. The inventory service
+    also wraps each movement in a context-managed
+    ``with self.db.begin_nested():`` savepoint. When a real ``commit()``
+    runs, it releases that open savepoint while the ``with`` block is
+    still active — which confuses SQLAlchemy's savepoint-restart listener
+    in the ``db_session`` fixture below and raises
+    ``InvalidRequestError: Can't operate on closed transaction inside
+    context manager``.
+
+    For integration tests we do not need a real commit — every test is
+    wrapped in a transaction that is rolled back at teardown. Overriding
+    ``commit()`` to flush keeps all writes visible within the test
+    session (so the API request sees its own writes) while never
+    releasing the savepoint, which keeps the rollback isolation intact
+    and works for every module (auth, products, inventory, orders).
+    """
+
+    def commit(self) -> None:
+        self.flush()
+
+
+class TestSessionFactory(sessionmaker):
+    """
+    sessionmaker bound to the FlushOnlySession class so tests get the
+    same constructor kwargs as the app's SessionLocal (autoflush=False,
+    expire_on_commit=False, future=True) but with flush-only commits.
+    """
+
+    def __init__(self, bind: Any) -> None:
+        kwargs = dict(getattr(SessionLocal, "kwargs", {}) or {})
+        kwargs.pop("bind", None)
+        super().__init__(
+            bind=bind,
+            class_=FlushOnlySession,
+            autoflush=kwargs.get("autoflush", False),
+            autocommit=kwargs.get("autocommit", False),
+            expire_on_commit=kwargs.get("expire_on_commit", False),
+            future=kwargs.get("future", True),
+        )
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -90,7 +139,7 @@ def _clean_test_database(_migrate_test_database: None) -> None:
 def db_session() -> Generator[Session, None, None]:
     connection = engine.connect()
     outer_transaction = connection.begin()
-    session = SessionLocal(bind=connection)
+    session = TestSessionFactory(connection)()
 
     session.begin_nested()
 

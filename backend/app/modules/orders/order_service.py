@@ -140,10 +140,10 @@ class OrderService:
             created_by=current_user.id,
             updated_by=current_user.id,
         )
-        order = self.order_repo.create(order)
+        with self.db.begin_nested():
+            order = self.order_repo.create(order)
 
-        # Create order items and reserve inventory
-        try:
+            # Create order items and reserve inventory
             for item_data in items_data:
                 item = OrderItem(
                     order_id=order.id,
@@ -166,9 +166,6 @@ class OrderService:
                     reference_number=order_number,
                     notes=f"Order {order_number} item reservation",
                 )
-        except Exception:
-            self.db.rollback()
-            raise
 
         self.db.commit()
         self.db.refresh(order)
@@ -246,22 +243,23 @@ class OrderService:
         order = self._get_order_or_404(order_id)
         self._validate_transition(order, OrderStatus.CONFIRMED)
 
-        order = self.order_repo.update(
-            order,
-            status=OrderStatus.CONFIRMED,
-            payment_status=PaymentStatus.PAID,
-            updated_by=current_user.id,
-        )
-
-        for item in order.items:
-            self.stock_service.confirm_reservation(
-                product_id=item.product_id,
-                warehouse_id=item.warehouse_id,
-                quantity=item.quantity,
-                current_user_id=current_user.id,
-                reference_number=order.order_number,
-                notes=f"Order {order.order_number} confirmed",
+        with self.db.begin_nested():
+            order = self.order_repo.update(
+                order,
+                status=OrderStatus.CONFIRMED,
+                payment_status=PaymentStatus.PAID,
+                updated_by=current_user.id,
             )
+
+            for item in order.items:
+                self.stock_service.confirm_reservation(
+                    product_id=item.product_id,
+                    warehouse_id=item.warehouse_id,
+                    quantity=item.quantity,
+                    current_user_id=current_user.id,
+                    reference_number=order.order_number,
+                    notes=f"Order {order.order_number} confirmed",
+                )
 
         self.db.commit()
         return order
@@ -583,6 +581,7 @@ class OrderService:
         Checks:
         - Each product exists.
         - Each product is ACTIVE.
+        - Each warehouse exists and is ACTIVE.
         - Loads product_name, product_sku, unit_price for snapshotting.
         - Calculates line_total for each item.
         """
@@ -596,6 +595,18 @@ class OrderService:
             if product.status != ProductStatus.ACTIVE:
                 raise OrderItemValidationError(
                     f"Product '{product.name}' is not active."
+                )
+
+            # Validate the warehouse exists and is active BEFORE creating the
+            # order item / reserving stock. Without this, a nonexistent
+            # warehouse surfaces as a raw ForeignKeyViolation (500) instead of
+            # a clean 4xx envelope. (Phase 7 bug fix.)
+            warehouse = self.stock_service.warehouse_repo.get_active_by_id(
+                item.warehouse_id
+            )
+            if warehouse is None:
+                raise OrderItemValidationError(
+                    f"Warehouse {item.warehouse_id} not found or is inactive."
                 )
 
             unit_price = product.price
