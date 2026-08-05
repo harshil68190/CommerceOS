@@ -67,6 +67,12 @@ def create_app() -> FastAPI:
         title=settings.APP_NAME,
         debug=settings.DEBUG,
         lifespan=lifespan,
+        # Disable interactive API docs (Swagger/ReDoc) in production.
+        # The OpenAPI schema endpoints are still reachable if needed, but
+        # the interactive UI is a common attack surface / info leak and is
+        # not needed in a live environment.
+        docs_url=None if settings.is_production else "/docs",
+        redoc_url=None if settings.is_production else "/redoc",
     )
 
     # --- Middleware ---------------------------------------------------

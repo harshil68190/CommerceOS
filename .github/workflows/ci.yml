@@ -1,0 +1,156 @@
+# ci.yml
+#
+# Responsibility: production-quality Continuous Integration pipeline for
+# the CommerceOS backend. Runs on every push to `main` and on every pull
+# request targeting `main`. It provisions real PostgreSQL and Redis
+# services (mirroring the app's runtime dependencies), applies Alembic
+# migrations, executes the full pytest suite with coverage, and fails the
+# build if any test fails or coverage drops below the configured
+# threshold (`--cov-fail-under=80`).
+#
+# Caching: `actions/setup-python` caches the pip dependency cache, keyed
+# on the hash of `backend/requirements.txt`, so unchanged dependencies
+# are restored from cache instead of reinstalled on every run.
+#
+# The coverage report (XML + HTML) is uploaded as a workflow artifact so
+# maintainers can inspect per-file coverage after the run.
+
+name: CI
+
+# Only run for the `main` branch. `push` covers direct commits;
+# `pull_request` covers the opened/updated/synchronized lifecycle of any
+# PR targeting `main`.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel any in-progress run for the same branch/PR when a newer commit
+# is pushed — saves CI minutes during rapid iteration.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+# Every `run:` step below executes from `backend/` (where pytest.ini,
+# alembic.ini, and the app source live), so `pytest` and `alembic` pick
+# up their config without extra `cd` gymnastics.
+defaults:
+  run:
+    working-directory: backend
+
+jobs:
+  test:
+    name: Backend tests (pytest + coverage)
+    runs-on: ubuntu-latest
+
+    # Environment variables shared by the alembic step and pytest. These
+    # mirror what `.env.test` would provide locally, but are injected
+    # inline so no secret/env file is committed. The conftest.py requires
+    # ENVIRONMENT=test and a database name containing "test".
+    env:
+      ENVIRONMENT: test
+      COMMERCEOS_ENV_FILE: .env.test
+      DATABASE_URL: postgresql+psycopg://commerceos:commerceos@localhost:5432/commerceos_test
+      REDIS_URL: redis://localhost:6379/15
+      JWT_SECRET_KEY: ci-only-non-secret-key-for-tests
+
+    # Real PostgreSQL 16 and Redis 7 services, matching the versions used
+    # by docker-compose. Each has a health check so the job only proceeds
+    # once they are actually ready to accept connections.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: commerceos
+          POSTGRES_PASSWORD: commerceos
+          POSTGRES_DB: commerceos
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U commerceos -d commerceos"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      # 1. Fetch the code.
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Provision Python. `cache: pip` plus `cache-dependency-path`
+      #    caches the pip dependency cache keyed on requirements.txt,
+      #    speeding up subsequent runs.
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+
+      # 3. Install pinned dependencies from requirements.txt.
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # 4. Create the dedicated test database. conftest.py refuses to run
+      #    against a database whose name does not contain "test", so we
+      #    create `commerceos_test` on the service instance. psycopg is
+      #    already installed from requirements.txt.
+      - name: Create test database
+        run: |
+          python - <<'PY'
+          import psycopg
+          conn = psycopg.connect(
+              "postgresql://commerceos:commerceos@localhost:5432/commerceos",
+              autocommit=True,
+          )
+          conn.execute("CREATE DATABASE commerceos_test")
+          conn.close()
+          print("Created commerceos_test database")
+          PY
+
+      # 5. Apply Alembic migrations to the test database. Idempotent —
+      #    `alembic upgrade head` only applies pending migrations. (The
+      #    test session also runs migrations via conftest.py; this step
+      #    makes the pipeline explicit and would catch migration errors
+      #    before the test run.)
+      - name: Apply Alembic migrations
+        run: alembic upgrade head
+
+      # 6. Run the complete pytest suite with coverage. Fail if:
+      #    - any test fails (pytest non-zero exit), or
+      #    - total coverage drops below 80% (--cov-fail-under=80).
+      #    Reports are emitted to the terminal, XML, and HTML.
+      - name: Run tests with coverage
+        run: |
+          pytest \
+            --cov=app \
+            --cov-report=term-missing \
+            --cov-report=xml:coverage.xml \
+            --cov-report=html:htmlcov \
+            --cov-fail-under=80
+
+      # 7. Upload the coverage report as an artifact, even if the run
+      #    failed (so coverage can be inspected). `if-no-files-found:
+      #    warn` avoids masking the real test/coverage failure.
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: |
+            backend/coverage.xml
+            backend/htmlcov
+          if-no-files-found: warn

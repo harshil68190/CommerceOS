@@ -1,0 +1,33 @@
+# .dockerignore
+#
+# Responsibility: keep the Docker build context small and — critically —
+# excludes secrets and local artifacts from the image. This file lives in
+# the build context (backend/), which is where Docker looks for it.
+
+# --- Secrets (NEVER bake into an image) ---
+.env
+.env.test
+.env.*.local
+
+# --- Local virtualenv & caches ---
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# --- VCS / IDE ---
+.git/
+.gitignore
+.vscode/
+.idea/
+
+# --- OS / misc ---
+.DS_Store
+Thumbs.db
+*.log
+node_modules/
+dist/

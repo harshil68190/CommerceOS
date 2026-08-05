@@ -74,8 +74,11 @@ def setup_logging(*, debug: bool = False) -> None:
     pretty-printing) but set the level to DEBUG for verbose local
     development; production runs at INFO.
     """
+    from app.core.config import get_settings
+
+    settings = get_settings()
     root_logger = logging.getLogger()
-    root_logger.setLevel(logging.DEBUG if debug else logging.INFO)
+    root_logger.setLevel(settings.effective_log_level)
 
     # Remove any handlers configured by default (e.g. by Uvicorn) so we
     # don't get duplicate log lines with two different formats.
@@ -86,5 +89,8 @@ def setup_logging(*, debug: bool = False) -> None:
     handler.addFilter(RequestIdLogFilter())
     root_logger.addHandler(handler)
 
+    is_debug = settings.effective_log_level == "DEBUG"
     # Quiet down noisy third-party loggers unless we're debugging.
-    logging.getLogger("uvicorn.access").setLevel(logging.WARNING if not debug else logging.INFO)
+    logging.getLogger("uvicorn.access").setLevel(
+        logging.WARNING if not is_debug else logging.INFO
+    )

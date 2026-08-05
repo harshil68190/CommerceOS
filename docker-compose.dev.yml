@@ -1,0 +1,30 @@
+# docker-compose.dev.yml
+#
+# Responsibility: development-only override layered on top of
+# docker-compose.yml. It enables uvicorn's `--reload` (hot reload) and
+# mounts the live source tree into the container so code changes are
+# reflected without rebuilding the image.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+#
+# This file must NEVER be used in production — it deliberately trades
+# performance and reproducibility for a fast edit-run loop.
+
+services:
+  backend:
+    # Override the base command to run uvicorn with --reload so file
+    # changes on the host trigger an in-container restart.
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    # Mount the app source and alembic dir so host edits are seen live
+    # by the container (with --reload). The image still contains these
+    # files, so omitting the volume (e.g. in prod) is perfectly fine.
+    volumes:
+      - ./backend/app:/app/app
+      - ./backend/alembic:/app/alembic
+      - ./backend/scripts:/app/scripts
+    environment:
+      # Dev-friendly settings; DEBUG=true is safe here because this
+      # override is never used in production.
+      ENVIRONMENT: development
+      DEBUG: "true"

@@ -1,0 +1,161 @@
+# render.yaml
+#
+# Responsibility
+# --------------
+# Render Blueprint (Infrastructure-as-Code) for the CommerceOS backend.
+# Declares the four pieces of production infrastructure:
+#
+#   1. A managed PostgreSQL instance (with TLS, automated backups, and a
+#      high-availability option available).
+#   2. A managed Redis instance.
+#   3. A one-off "migrations" job that runs `alembic upgrade head` against
+#      the database BEFORE the web service first boots. This avoids the
+#      classic concurrent-migration race when multiple web instances start
+#      at the same time.
+#   4. The FastAPI web service, which runs migrations as a separate job
+#      (RUN_MIGRATIONS=false) and exposes the readiness endpoint that
+#      Render's health check uses to decide traffic eligibility.
+#
+# Usage
+# -----
+# Two ways to apply this Blueprint:
+#   - Import it from the Render dashboard ("New +" -> "Blueprint"),
+#     pick the repo, and Render provisions everything above.
+#   - Or use the Render CLI: `render blueprint apply`.
+#
+# Required secrets (set in the Render dashboard after provisioning, or
+# via the CLI):
+#   JWT_SECRET_KEY  - long random value, e.g.
+#                     `python -c "import secrets; print(secrets.token_urlsafe(64))"`
+#   CORS_ORIGINS    - comma-separated list of allowed browser origins
+#                     (e.g. the deployed frontend URL).
+#
+# Everything else is derived automatically from the managed services'
+# "Internal Database URL" / "Internal Redis URL" connection strings, which
+# Render injects as env vars for us.
+#
+# NOTE: This blueprint is NOT yet verified against a live Render account.
+# Review the README's "Remaining manual actions" before the first deploy.
+
+services:
+  # --- PostgreSQL (managed) ----------------------------------------------
+  - type: pgsql
+    name: commerceos-db
+    # Version matching what local dev / CI use (postgres:16).
+    database: commerceos
+    user: commerceos
+    plan: basic-256mb
+    # Enable automatic daily backups (Render retains several days).
+    backup:
+      enabled: true
+
+  # --- Redis (managed) ----------------------------------------------------
+  - type: redis
+    name: commerceos-redis
+    plan: starter
+    maxmemoryPolicy: allkeys-lru
+    # Enable TLS for the managed Redis endpoint.
+    ipAllowList: # allow connection from anywhere for the web service
+      - source: 0.0.0.0/0
+        description: everywhere
+
+  # --- Migrations one-off job ---------------------------------------------
+  - type: worker
+    name: commerceos-migrations
+    runtime: docker
+    plan: free
+    # Build the same backend image as the web service.
+    build:
+      dockerfilePath: ./backend/Dockerfile
+      context: ./backend
+    # Run migrations once, then exit. This is a one-off job; it is NOT
+    # kept running. It depends on the database being reachable.
+    startCommand: alembic upgrade head
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: COMMERCEOS_ENV_FILE
+        value: /dev/null
+      - key: DATABASE_URL
+        fromDatabase:
+          name: commerceos-db
+          property: connectionString
+      - key: REDIS_URL
+        fromRedis:
+          name: commerceos-redis
+          property: connectionString
+      - key: JWT_SECRET_KEY
+        sync: false
+      - key: RUN_MIGRATIONS
+        value: "false"
+
+  # --- FastAPI web service -------------------------------------------------
+  - type: web
+    name: commerceos-api
+    runtime: docker
+    plan: starter
+    # Build the backend image from backend/Dockerfile.
+    build:
+      dockerfilePath: ./backend/Dockerfile
+      context: ./backend
+    # Migration runs as a separate job, so the web service must NOT run
+    # them again on startup (avoids concurrent-migration races).
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/v1/health/ready
+    autoDeploy: true
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: COMMERCEOS_ENV_FILE
+        value: /dev/null
+      - key: DEBUG
+        value: "false"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: commerceos-db
+          property: connectionString
+      - key: REDIS_URL
+        fromRedis:
+          name: commerceos-redis
+          property: connectionString
+      - key: JWT_SECRET_KEY
+        sync: false # set manually in the Render dashboard
+      - key: CORS_ORIGINS
+        value: http://localhost:5173 # replace with the deployed frontend URL
+      - key: WEB_CONCURRENCY
+        value: "2"
+      - key: LOG_LEVEL
+        value: INFO
+      - key: RUN_MIGRATIONS
+        value: "false"
+      - key: DB_POOL_SIZE
+        value: "5"
+
+  # --- Optional: a preview service for pull requests -----------------------
+  # Uncomment if you want ephemeral preview environments for PRs.
+  # - type: web
+  #   name: commerceos-api-preview
+  #   runtime: docker
+  #   plan: free
+  #   build:
+  #     dockerfilePath: ./backend/Dockerfile
+  #     context: ./backend
+  #   healthCheckPath: /api/v1/health/ready
+  #   autoDeploy: false
+  #   envVars:
+  #     - key: ENVIRONMENT
+  #       value: preview
+  #     - key: DATABASE_URL
+  #       fromDatabase:
+  #         name: commerceos-db
+  #         property: connectionString
+  #     - key: REDIS_URL
+  #       fromRedis:
+  #         name: commerceos-redis
+  #         property: connectionString
+  #     - key: JWT_SECRET_KEY
+  #       sync: false
+  #     - key: CORS_ORIGINS
+  #       value: "*"
+  #     - key: RUN_MIGRATIONS
+  #       value: "false"

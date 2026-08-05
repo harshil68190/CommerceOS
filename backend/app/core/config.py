@@ -24,6 +24,14 @@ from typing import List
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# SQLAlchemy driver strings normalized to the psycopg (v3) driver so the
+# same short URLs work in Render's dashboards and our env templates.
+_DRIVER_ALIASES = {
+    "postgres://": "postgresql+psycopg://",
+    "postgresql://": "postgresql+psycopg://",
+    "postgresql+psycopg2://": "postgresql+psycopg://",
+}
+
 
 class Settings(BaseSettings):
     """
@@ -50,6 +58,15 @@ class Settings(BaseSettings):
     # --- Server ----------------------------------------------------------
     HOST: str = "0.0.0.0"
     PORT: int = 8000
+    # Number of uvicorn worker processes. In production a value > 1 is
+    # recommended; each worker gets its own DB connection pool sized by
+    # DB_POOL_SIZE below. Local dev / tests keep the default of 1.
+    WEB_CONCURRENCY: int = 1
+
+    # --- Logging ----------------------------------------------------------
+    # Explicit log level override. Defaults derive from DEBUG (DEBUG ->
+    # "DEBUG", else "INFO"); production should set LOG_LEVEL=INFO explicitly.
+    LOG_LEVEL: str | None = None
 
     # --- Database ----------------------------------------------------------
     # Standard SQLAlchemy connection URL, e.g.:
@@ -62,6 +79,13 @@ class Settings(BaseSettings):
     DB_MAX_OVERFLOW: int = 20
     DB_POOL_TIMEOUT_SECONDS: int = 30
     DB_ECHO: bool = False  # SQL statement logging — dev-only, never in prod
+
+    # --- Migrations ----------------------------------------------------------
+    # Whether the container's entrypoint should run `alembic upgrade head`
+    # on startup. True for local dev / single-node Compose; for production
+    # Render runs migrations as a separate one-off job, so set this to
+    # "false" on the web service to avoid concurrent-migration races.
+    RUN_MIGRATIONS: bool = True
 
     # --- Redis ----------------------------------------------------------
     REDIS_URL: str = Field(
@@ -90,6 +114,28 @@ class Settings(BaseSettings):
             raise ValueError(f"ENVIRONMENT must be one of {allowed}, got '{value}'")
         return value
 
+    @field_validator("DEBUG")
+    @classmethod
+    def _debug_forbidden_in_production(cls, value: bool, info) -> bool:
+        # Fail fast with a clear message rather than accidentally serving
+        # a production site with debug/traceback handling enabled.
+        environment = info.data.get("ENVIRONMENT")
+        if environment == "production" and value:
+            raise ValueError(
+                "DEBUG must be False when ENVIRONMENT=production. "
+                "Set DEBUG=false in the production environment."
+            )
+        return value
+
+    @field_validator("DATABASE_URL")
+    @classmethod
+    def _normalize_database_url(cls, value: str) -> str:
+        """Normalize common Postgres URL driver prefixes to psycopg v3."""
+        for prefix, replacement in _DRIVER_ALIASES.items():
+            if value.lower().startswith(prefix):
+                return replacement + value[len(prefix):]
+        return value
+
     @property
     def cors_origins_list(self) -> List[str]:
         """Parse the comma-separated CORS_ORIGINS env var into a clean list."""
@@ -98,6 +144,15 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.ENVIRONMENT == "production"
+
+    @property
+    def effective_log_level(self) -> str:
+        """Log level to use: explicit LOG_LEVEL wins, else derived from DEBUG."""
+        if self.LOG_LEVEL:
+            return self.LOG_LEVEL.upper()
+        if self.DEBUG:
+            return "DEBUG"
+        return "INFO"
 
 
 @lru_cache

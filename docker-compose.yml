@@ -7,17 +7,42 @@
 # healthy, not just "started" — this avoids the classic race condition
 # where the app boots before Postgres is actually ready to accept
 # connections.
+#
+# This is the BASE compose file. It intentionally runs the backend in
+# production mode (no --reload, no source mount). For a local hot-reload
+# development loop, layer `docker-compose.dev.yml` on top:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+#
+# NOTE (path layout): the Dockerfile, .env, and app source all live
+# under `./backend`. The build context and env_file must therefore point
+# at `./backend`, NOT the repo root. This was the original bug in this
+# file — the healthcheck/volumes were correct but the backend service
+# pointed at the wrong context.
 
 services:
   backend:
     build:
-      context: .
+      # Dockerfile lives in backend/, so the build context must be
+      # backend/ (not the repo root where this compose file sits).
+      context: ./backend
       dockerfile: Dockerfile
+    image: commerceos-backend:latest
     container_name: commerceos_backend
     ports:
       - "8000:8000"
     env_file:
-      - .env
+      # The app reads its runtime config from backend/.env (see
+      # app/core/config.py). Non-secret values are overridable via
+      # environment: below; secrets stay in .env / the host env.
+      - ./backend/.env
+    environment:
+      # Compose-services hostnames are used here so the app inside the
+      # container reaches Postgres/Redis by service name, not localhost.
+      # These override the localhost values in backend/.env (which are
+      # only correct when running the app natively on the host).
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-commerceos}:${POSTGRES_PASSWORD:-commerceos}@postgres:5432/${POSTGRES_DB:-commerceos}
+      REDIS_URL: redis://redis:6379/0
     depends_on:
       postgres:
         condition: service_healthy
@@ -28,16 +53,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 10s
-    # Mounts the app source so local code changes are reflected without
-    # rebuilding the image during development. Combined with
-    # `--reload`, this gives a fast local dev loop; the override is
-    # applied via the command below rather than baked into the Dockerfile
-    # so the production image (built the same way) runs without --reload.
-    volumes:
-      - ./app:/app/app
-      - ./alembic:/app/alembic
-    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+      start_period: 15s
     restart: unless-stopped
 
   postgres:
@@ -52,7 +68,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-commerceos}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-commerceos} -d ${POSTGRES_DB:-commerceos}"]
       interval: 5s
       timeout: 5s
       retries: 5
