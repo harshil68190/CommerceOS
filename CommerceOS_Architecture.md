@@ -1,8 +1,78 @@
 # CommerceOS — System Architecture Design
 
-**Status:** Architecture finalization phase — no implementation yet.
+**Status:** Reference architecture — **implementation is feature complete** for
+the current milestone scope. This document records the original design; the
+[Implemented vs. Planned](#implemented-vs-planned) section below clarifies
+exactly what has been built and what remains roadmapped.
 **Author:** Staff Engineering / System Architecture review
-**Scope:** This document is the single source of truth for how CommerceOS is structured before any module is implemented.
+**Scope:** This document is the single source of truth for how CommerceOS is
+structured.
+
+---
+
+## Implemented vs. Planned
+
+> **Read this first.** The detailed design in sections below describes the
+> full target architecture. Not all of it is built yet. The tables below
+> distinguish **what exists in the repository today** from **what is planned
+> future work**, so the reader (and a recruiter reviewing this repo) is never
+> misled about the current state.
+
+### ✅ Implemented (in the repository)
+
+| Capability | Where | Notes |
+|-----------|-------|-------|
+| Modular monolith layering (Router → Service → Repository → DB) | `backend/app/{modules,models,db,schemas}` | Enforced by convention across all modules |
+| App factory + lifespan + middleware wiring | `backend/app/main.py` | CORS, Request-ID, centralized error handler |
+| Health (liveness) & readiness probes | `backend/app/api_router.py` | `/health`, `/health/ready` (checks Postgres + Redis) |
+| JWT auth + rotating refresh tokens in Redis | `backend/app/modules/auth/` | Access + refresh tokens, single-use rotation, logout revocation |
+| RBAC (admin / seller / inventory_manager / customer) | `backend/app/modules/*/dependencies.py`, `permissions.py` | Enforced via FastAPI dependencies |
+| Product catalog (CRUD, search, lifecycle) | `backend/app/modules/products/` | draft/active/archived/out_of_stock; admin vs customer routes |
+| Multi-warehouse inventory + immutable ledger | `backend/app/modules/inventory/` | add/remove/adjust/reserve/release/confirm/transfer; `inventory_transactions` audit |
+| Stock reservations & low-stock reports | `backend/app/modules/inventory/` | `select for update` + optimistic concurrency (`version`) |
+| Order lifecycle state machine | `backend/app/modules/orders/` | pending→confirmed→shipped→delivered→returned→refunded; inventory integration |
+| SQLAlchemy 2.x typed models + Alembic migrations | `backend/app/models/`, `backend/alembic/` | 5 migration revisions |
+| Pydantic v2 schemas + centralized error envelope | `backend/app/schemas/`, `backend/app/middleware/error_handler.py` | `error_code`/`message`/`details`/`request_id` |
+| Test suite (integration, 200+ tests) | `backend/tests/` | pytest + httpx; 80%+ coverage gate |
+| Docker / Docker Compose (base + dev overlay) | `docker-compose.yml`, `docker-compose.dev.yml` | postgres + redis + backend; health-conditioned startup |
+| Render Blueprint (IaC) | `render.yaml` | managed Postgres + Redis, migration job, web service |
+| React + TypeScript SPA | `frontend/` | auth, dashboard, products, inventory, orders, profile |
+
+### 🚧 Planned (future work — NOT yet implemented)
+
+| Capability | Notes |
+|-----------|-------|
+| Cart & Checkout flow | Referenced in design; not built |
+| Coupons / discount strategies | Design + Strategy pattern described; not built |
+| Product reviews (verified purchase) | Not built |
+| Analytics dashboards | Not built |
+| Payment gateway integration (Stripe/Razorpay) | Not built (no webhooks) |
+| Background workers (Celery/RQ) | `app/workers/` exists but is **unused** |
+| Rate limiting (Redis-backed) | Not built |
+| Notifications / email / SMS / push | Not built |
+| Categories / brands as normalized tables | Currently plain string fields on `Product` |
+| Search engine (Elasticsearch/Meilisearch) | Not built (Postgres string search only) |
+| Multi-vendor marketplace / seller payouts | Not built |
+| Event sourcing for orders | Future enhancement |
+| S3 / object storage for images | Not built |
+| Frontend production Dockerfile | Not yet wired into the deploy stack |
+| GitHub Actions workflow file | Referenced and documented; **not committed** to repo |
+
+> The design sections below describe the **full target state**. Where the
+> implemented code diverges from the original design (e.g. `category`/`brand`
+> as plain strings, refresh tokens in Redis instead of a `refresh_tokens` table,
+> no `order_status_history` table), the divergence is noted in the relevant
+> source files and section 11's improvements. Treat the **Implemented** table
+> above as the source of truth for the current state.
+
+---
+
+## How to read the rest of this document
+
+The remaining sections are the **reference architecture** written before and
+during implementation. They document the intended design, patterns, and
+scaling path. Cross-reference them with the **Implemented vs. Planned** table
+above to see what exists today versus what is on the roadmap.
 
 ---
 

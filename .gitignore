@@ -37,3 +37,26 @@ coverage.xml
 # Python cache
 __pycache__/
 *.pyc
+
+# Node
+node_modules/
+frontend/node_modules/
+
+# React build
+frontend/dist/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Environment
+.env
+.env.*
+!.env.example
+!.env.production.example
+
+# Coverage
+.coverage
+htmlcov/
+coverage/
