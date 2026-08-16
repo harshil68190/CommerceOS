@@ -3,19 +3,21 @@ import { ordersApi } from '@/lib/api/orders'
 import { queryKeys } from '@/lib/query/queryKeys'
 import type { OrderCreatePayload, OrderFilters, OrderUpdatePayload } from '@/types/api'
 
-export function useOrders(filters: OrderFilters = {}) {
+export function useOrders(filters: OrderFilters = {}, enabled = true) {
   return useQuery({
     queryKey: queryKeys.orders.list(filters),
     queryFn: () => ordersApi.list(filters),
     placeholderData: (prev) => prev,
+    enabled,
   })
 }
 
-export function useMyOrders(filters: OrderFilters = {}) {
+export function useMyOrders(filters: OrderFilters = {}, enabled = true) {
   return useQuery({
     queryKey: queryKeys.orders.my(filters),
     queryFn: () => ordersApi.listMy(filters),
     placeholderData: (prev) => prev,
+    enabled,
   })
 }
 

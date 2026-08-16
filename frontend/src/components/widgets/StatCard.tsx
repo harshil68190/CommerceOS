@@ -15,19 +15,23 @@ interface StatCardProps {
 /** KPI card used on the dashboard. */
 export function StatCard({ title, value, icon, description, className, loading }: StatCardProps) {
   return (
-    <Card className={cn(className)}>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+    <Card className={cn('border-0 bg-gradient-to-br from-card to-muted/25 shadow-sm', className)}>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
         <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
-        {icon && <div className="text-muted-foreground">{icon}</div>}
+        {icon && (
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+            {icon}
+          </div>
+        )}
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-2">
         {loading ? (
           <Skeleton className="h-7 w-20" />
         ) : (
-          <div className="text-2xl font-bold">{value}</div>
+          <div className="text-2xl font-semibold tracking-tight">{value}</div>
         )}
         {description && (
-          <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+          <p className="text-xs text-muted-foreground">{description}</p>
         )}
       </CardContent>
     </Card>

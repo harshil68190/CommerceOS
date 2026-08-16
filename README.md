@@ -271,6 +271,20 @@ npm run dev
 Frontend dev server is at `http://localhost:5173` and proxies `/api` to the
 backend (see `vite.config.ts`).
 
+### Local admin bootstrap
+
+Public registration always creates a `customer` account. To create a local admin
+account for development, run the controlled bootstrap script from the backend
+folder:
+
+```bash
+cd backend
+python scripts/create_admin.py --email admin@commerceos.local --password 'ChangeMe!123' --first-name Admin --last-name User
+```
+
+The script updates an existing user to `ADMIN` if the email already exists, and
+never exposes an admin role selector on the public registration page.
+
 ---
 
 ## Docker Setup

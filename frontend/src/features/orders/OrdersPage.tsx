@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -23,34 +23,59 @@ export default function OrdersPage() {
 
   const isCustomer = user?.role === 'customer'
   const adminFilters = { page, page_size: 20, sort: 'newest', status: status || undefined }
-  const { data, isLoading, error, refetch } = isCustomer
-    ? useMyOrders({ page, page_size: 20, sort: 'newest' })
-    : useOrders(adminFilters)
+  const customerOrders = useMyOrders({ page, page_size: 20, sort: 'newest' }, isCustomer)
+  const adminOrders = useOrders(adminFilters, !isCustomer)
+  const { data, isLoading, error, refetch } = isCustomer ? customerOrders : adminOrders
 
-  const orders = data?.items ?? []
+  const orders = useMemo(() => data?.items ?? [], [data?.items])
   const pages = data?.pages ?? 1
   const total = data?.total ?? 0
 
+  const summary = useMemo(() => {
+    const counts = { pending: 0, confirmed: 0, shipped: 0, delivered: 0 }
+    for (const order of orders) {
+      if (order.status in counts) counts[order.status as keyof typeof counts] += 1
+    }
+    return counts
+  }, [orders])
+
   const columns: Column<Order>[] = [
-    { key: 'order_number', header: 'Order', cell: (o) => <span className="font-medium">{o.order_number}</span> },
-    { key: 'customer', header: 'Customer', cell: (o) => o.customer_id.slice(0, 8) },
-    { key: 'total', header: 'Total', cell: (o) => formatCurrency(o.total) },
+    {
+      key: 'order_number',
+      header: 'Order',
+      cell: (o) => (
+        <div>
+          <div className="font-medium">{o.order_number}</div>
+          <div className="text-xs text-muted-foreground">{formatDate(o.created_at)}</div>
+        </div>
+      ),
+    },
+    {
+      key: 'customer',
+      header: 'Customer',
+      cell: (o) => (
+        <div>
+          <div className="font-medium">{o.customer_id.slice(0, 8)}</div>
+          <div className="text-xs text-muted-foreground">{o.items.length} items</div>
+        </div>
+      ),
+    },
+    { key: 'total', header: 'Total', cell: (o) => <span className="font-medium">{formatCurrency(o.total)}</span> },
     { key: 'status', header: 'Status', cell: (o) => <StatusBadge status={o.status} /> },
     { key: 'payment', header: 'Payment', cell: (o) => <StatusBadge status={o.payment_status} /> },
-    { key: 'created', header: 'Created', cell: (o) => formatDate(o.created_at) },
   ]
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Orders</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Orders</h1>
           <p className="text-sm text-muted-foreground">
             {isCustomer ? 'Your orders' : 'Manage all orders'}
           </p>
         </div>
         {!isCustomer && (
-          <div className="w-48">
+          <div className="w-full max-w-52">
             <Select value={status} onValueChange={(v) => { setStatus(v === 'all' ? '' : v); setPage(1) }}>
               <SelectTrigger>
                 <SelectValue placeholder="Filter by status" />
@@ -70,8 +95,29 @@ export default function OrdersPage() {
         )}
       </div>
 
+      {!isCustomer && (
+        <div className="grid gap-3 md:grid-cols-4">
+          {[
+            { label: 'Pending', value: summary.pending },
+            { label: 'Confirmed', value: summary.confirmed },
+            { label: 'Shipped', value: summary.shipped },
+            { label: 'Delivered', value: summary.delivered },
+          ].map((item) => (
+            <Card key={item.label} className="border-0 bg-muted/30 shadow-sm">
+              <CardContent className="flex items-center justify-between p-4">
+                <div>
+                  <div className="text-sm text-muted-foreground">{item.label}</div>
+                  <div className="text-2xl font-semibold">{item.value}</div>
+                </div>
+                <StatusBadge status={item.label.toLowerCase()} />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
       <Card>
-        <CardHeader>
+        <CardHeader className="pb-3">
           <CardTitle>{isCustomer ? 'My Orders' : 'All Orders'}</CardTitle>
         </CardHeader>
         <CardContent>
@@ -82,7 +128,7 @@ export default function OrdersPage() {
             error={error}
             onRetry={refetch}
             rowKey={(o) => o.id}
-            onRowClick={(o) => navigate(`/orders/${o.id}`)}
+            onRowClick={isCustomer ? undefined : (o) => navigate(`/orders/${o.id}`)}
             page={page}
             pages={pages}
             total={total}

@@ -6,10 +6,12 @@ interface AuthState {
   user: User | null
   accessToken: string | null
   refreshToken: string | null
+  redirectReason: 'session_expired' | null
   isHydrated: boolean
   setAuth: (user: User, accessToken: string, refreshToken: string) => void
   setAccessToken: (token: string) => void
   setUser: (user: User) => void
+  setRedirectReason: (reason: 'session_expired' | null) => void
   clearAuth: () => void
 }
 
@@ -19,11 +21,13 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       accessToken: null,
       refreshToken: null,
+      redirectReason: null,
       isHydrated: false,
       setAuth: (user, accessToken, refreshToken) =>
-        set({ user, accessToken, refreshToken, isHydrated: true }),
+        set({ user, accessToken, refreshToken, redirectReason: null, isHydrated: true }),
       setAccessToken: (token) => set({ accessToken: token }),
       setUser: (user) => set({ user }),
+      setRedirectReason: (reason) => set({ redirectReason: reason }),
       clearAuth: () =>
         set({
           user: null,

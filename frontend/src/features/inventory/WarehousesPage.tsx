@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Plus, Pencil, Power, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -10,6 +10,7 @@ import {
   useWarehouses,
   useDeactivateWarehouse,
   useReactivateWarehouse,
+  useInventory,
 } from '@/features/inventory/hooks'
 import { toast } from '@/stores/toastStore'
 import type { Warehouse } from '@/types/api'
@@ -22,15 +23,28 @@ export default function WarehousesPage() {
   const deactivateMutation = useDeactivateWarehouse()
   const reactivateMutation = useReactivateWarehouse()
 
-const { data, isLoading, error, refetch } = useWarehouses({
+  const { data, isLoading, error, refetch } = useWarehouses({
     page,
     page_size: 20,
     sort: 'newest',
   })
 
+  const { data: inventoryData } = useInventory({ page: 1, page_size: 200, sort: 'newest' })
+
   const warehouses = data?.items ?? []
   const pages = data?.pages ?? 1
   const total = data?.total ?? 0
+
+  const inventoryByWarehouse = useMemo(() => {
+    const counts: Record<string, number> = {}
+    for (const entry of inventoryData?.items ?? []) {
+      counts[entry.warehouse_id] = (counts[entry.warehouse_id] ?? 0) + 1
+    }
+    return counts
+  }, [inventoryData])
+
+  const activeWarehouses = warehouses.filter((warehouse) => warehouse.is_active).length
+  const inactiveWarehouses = warehouses.filter((warehouse) => !warehouse.is_active).length
 
   async function handleDeactivate(w: Warehouse) {
     if (!window.confirm(`Deactivate "${w.name}"?`)) return
@@ -54,7 +68,7 @@ const { data, isLoading, error, refetch } = useWarehouses({
   const columns: Column<Warehouse>[] = [
     {
       key: 'name',
-      header: 'Name',
+      header: 'Warehouse',
       cell: (w) => (
         <div>
           <div className="font-medium">{w.name}</div>
@@ -62,8 +76,20 @@ const { data, isLoading, error, refetch } = useWarehouses({
         </div>
       ),
     },
-    { key: 'city', header: 'City', cell: (w) => w.city || '—' },
-    { key: 'country', header: 'Country', cell: (w) => w.country || '—' },
+    {
+      key: 'location',
+      header: 'Location',
+      cell: (w) => (
+        <div className="text-sm text-muted-foreground">
+          {w.city || '—'}{w.city && w.country ? ', ' : ''}{w.country || ''}
+        </div>
+      ),
+    },
+    {
+      key: 'inventory',
+      header: 'Inventory items',
+      cell: (w) => <span className="font-medium">{inventoryByWarehouse[w.id] ?? 0}</span>,
+    },
     {
       key: 'active',
       header: 'Status',
@@ -120,10 +146,10 @@ const { data, isLoading, error, refetch } = useWarehouses({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Warehouses</h1>
-          <p className="text-sm text-muted-foreground">Manage warehouse locations</p>
+          <h1 className="text-3xl font-bold tracking-tight">Warehouses</h1>
+          <p className="text-sm text-muted-foreground">Network operations and fulfillment locations</p>
         </div>
         <RoleGate roles={['admin']}>
           <Button onClick={() => { setEditing(null); setFormOpen(true) }}>
@@ -133,8 +159,38 @@ const { data, isLoading, error, refetch } = useWarehouses({
         </RoleGate>
       </div>
 
+      <div className="grid gap-3 md:grid-cols-3">
+        <Card className="border-0 bg-muted/30 shadow-sm">
+          <CardContent className="flex items-center justify-between p-4">
+            <div>
+              <div className="text-sm text-muted-foreground">Active</div>
+              <div className="text-2xl font-semibold">{activeWarehouses}</div>
+            </div>
+            <Badge variant="success">Online</Badge>
+          </CardContent>
+        </Card>
+        <Card className="border-0 bg-muted/30 shadow-sm">
+          <CardContent className="flex items-center justify-between p-4">
+            <div>
+              <div className="text-sm text-muted-foreground">Inactive</div>
+              <div className="text-2xl font-semibold">{inactiveWarehouses}</div>
+            </div>
+            <Badge variant="muted">Paused</Badge>
+          </CardContent>
+        </Card>
+        <Card className="border-0 bg-muted/30 shadow-sm">
+          <CardContent className="flex items-center justify-between p-4">
+            <div>
+              <div className="text-sm text-muted-foreground">Total</div>
+              <div className="text-2xl font-semibold">{total}</div>
+            </div>
+            <Badge variant="outline">Locations</Badge>
+          </CardContent>
+        </Card>
+      </div>
+
       <Card>
-        <CardHeader>
+        <CardHeader className="pb-3">
           <CardTitle>All Warehouses</CardTitle>
         </CardHeader>
         <CardContent>

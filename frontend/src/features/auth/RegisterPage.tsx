@@ -70,7 +70,7 @@ export default function RegisterPage() {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl">Create Account</CardTitle>
-          <CardDescription>Join CommerceOS</CardDescription>
+          <CardDescription>Public registration creates a customer account.</CardDescription>
         </CardHeader>
         <CardContent>
           <Form {...form}>

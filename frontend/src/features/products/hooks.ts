@@ -7,11 +7,21 @@ import type {
   UpdateProductPayload,
 } from '@/types/api'
 
-export function useAdminProducts(filters: ProductFilters) {
+export function useProducts(filters: ProductFilters, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.products.list(filters),
+    queryFn: () => productsApi.list(filters),
+    placeholderData: (prev) => prev,
+    enabled,
+  })
+}
+
+export function useAdminProducts(filters: ProductFilters, enabled = true) {
   return useQuery({
     queryKey: queryKeys.products.admin(filters),
     queryFn: () => productsApi.listAdmin(filters),
     placeholderData: (prev) => prev,
+    enabled,
   })
 }
 

@@ -65,7 +65,7 @@ export function DataTable<T>({
 
   if (data.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+      <div className="rounded-xl border border-dashed bg-muted/20 p-8 text-center text-sm text-muted-foreground">
         {emptyMessage}
       </div>
     )
@@ -73,35 +73,37 @@ export function DataTable<T>({
 
   return (
     <div>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            {columns.map((col) => (
-              <TableHead key={col.key} className={col.className}>
-                {col.header}
-              </TableHead>
-            ))}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {data.map((row) => (
-            <TableRow
-              key={rowKey(row)}
-              className={cn(onRowClick && 'cursor-pointer')}
-              onClick={onRowClick ? () => onRowClick(row) : undefined}
-            >
+      <div className="overflow-hidden rounded-xl border">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-muted/30 hover:bg-muted/30">
               {columns.map((col) => (
-                <TableCell key={col.key} className={col.className}>
-                  {col.cell(row)}
-                </TableCell>
+                <TableHead key={col.key} className={cn('text-xs uppercase tracking-[0.12em] text-muted-foreground', col.className)}>
+                  {col.header}
+                </TableHead>
               ))}
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {data.map((row) => (
+              <TableRow
+                key={rowKey(row)}
+                className={cn('align-middle transition-colors', onRowClick && 'cursor-pointer hover:bg-muted/30')}
+                onClick={onRowClick ? () => onRowClick(row) : undefined}
+              >
+                {columns.map((col) => (
+                  <TableCell key={col.key} className={cn('py-3 text-sm', col.className)}>
+                    {col.cell(row)}
+                  </TableCell>
+                ))}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
 
       {page !== undefined && pages !== undefined && onPageChange && (
-        <div className="mt-4 flex items-center justify-between">
+        <div className="mt-4 flex items-center justify-between gap-3">
           <p className="text-sm text-muted-foreground">
             Page {page} of {pages || 1}
             {total !== undefined && ` · ${total} total`}

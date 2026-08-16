@@ -9,8 +9,17 @@ import { tokenStorage } from '@/lib/auth/tokenStorage'
  * is present, and refreshed whenever the token changes.
  */
 export function useAuth() {
-  const { user, accessToken, refreshToken, isHydrated, setAuth, setUser, clearAuth } =
-    useAuthStore()
+  const {
+    user,
+    accessToken,
+    refreshToken,
+    redirectReason,
+    isHydrated,
+    setAuth,
+    setUser,
+    setRedirectReason,
+    clearAuth,
+  } = useAuthStore()
 
   const { refetch: refetchMe } = useQuery({
     queryKey: ['auth', 'me', accessToken],
@@ -21,6 +30,7 @@ export function useAuth() {
   })
 
   async function login(email: string, password: string) {
+    setRedirectReason(null)
     const tokens = await authApi.login({ email, password })
     tokenStorage.setTokens(tokens.access_token, tokens.refresh_token)
     const me = await authApi.me()
@@ -34,6 +44,7 @@ export function useAuth() {
   }
 
   async function logout() {
+    setRedirectReason(null)
     if (refreshToken) {
       try {
         await authApi.logout(refreshToken)
@@ -49,12 +60,14 @@ export function useAuth() {
     user,
     accessToken,
     refreshToken,
+    redirectReason,
     isAuthenticated: !!user && !!accessToken,
     isHydrated,
     login,
     register,
     logout,
     setUser,
+    setRedirectReason,
     refetchMe,
   }
 }

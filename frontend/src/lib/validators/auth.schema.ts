@@ -15,7 +15,7 @@ export const registerSchema = z
       .regex(/[a-z]/, 'Must contain a lowercase letter.')
       .regex(/[A-Z]/, 'Must contain an uppercase letter.')
       .regex(/\d/, 'Must contain a digit.')
-      .regex(/[!@#$%^&*()\-_=+\[\]{};:'",.<>/?\\|`~]/, 'Must contain a special character.'),
+      .regex(/[^A-Za-z0-9]/, 'Must contain a special character.'),
     confirm_password: z.string(),
     first_name: z.string().min(1, 'First name is required.').max(100),
     last_name: z.string().min(1, 'Last name is required.').max(100),

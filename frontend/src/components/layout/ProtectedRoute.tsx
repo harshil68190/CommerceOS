@@ -7,7 +7,7 @@ import { FullScreenLoader } from '@/components/feedback/FullScreenLoader'
  * session is still hydrating, then redirects to /login if unauthenticated.
  */
 export function ProtectedRoute() {
-  const { isAuthenticated, isHydrated } = useAuth()
+  const { isAuthenticated, isHydrated, user, accessToken, refreshToken, redirectReason } = useAuth()
   const location = useLocation()
 
   if (!isHydrated) {
@@ -15,7 +15,16 @@ export function ProtectedRoute() {
   }
 
   if (!isAuthenticated) {
-    return <Navigate to="/login" state={{ from: location }} replace />
+    const hadAuthenticatedSession =
+      !!user || !!accessToken || !!refreshToken || redirectReason === 'session_expired'
+
+    return (
+      <Navigate
+        to="/login"
+        state={hadAuthenticatedSession ? { from: location, reason: 'session_expired' } : { from: location }}
+        replace
+      />
+    )
   }
 
   return <Outlet />

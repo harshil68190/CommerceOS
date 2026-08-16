@@ -4,6 +4,7 @@ import axios, {
   InternalAxiosRequestConfig,
 } from 'axios'
 import { tokenStorage } from '@/lib/auth/tokenStorage'
+import { useAuthStore } from '@/lib/auth/useAuthStore'
 import type { ApiError, TokenResponse } from '@/types/api'
 
 /** Normalized API error thrown by the client. */
@@ -54,8 +55,10 @@ async function refreshAccessToken(): Promise<string | null> {
     return data.access_token
   } catch {
     tokenStorage.clear()
-    return null
-  }
+  useAuthStore.getState().clearAuth()
+  useAuthStore.getState().setRedirectReason('session_expired')
+  return null
+}
 }
 
 interface RetriableConfig extends InternalAxiosRequestConfig {

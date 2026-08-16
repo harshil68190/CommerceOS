@@ -32,6 +32,16 @@ from decimal import Decimal
 from math import ceil
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+
+def _validate_decimal_places(value: Decimal | None, *, max_places: int, field_name: str) -> Decimal | None:
+    if value is None:
+        return None
+    exponent = value.as_tuple().exponent
+    decimal_places = -exponent if exponent < 0 else 0
+    if decimal_places > max_places:
+        raise ValueError(f"{field_name} must have at most {max_places} decimal places.")
+    return value
+
 from app.models.product import ProductStatus
 
 # Only these two statuses are valid as a *creation-time* or general
@@ -51,19 +61,31 @@ class CreateProductRequest(BaseModel):
     brand: str | None = Field(default=None, max_length=100)
     category: str | None = Field(default=None, max_length=100)
 
-    price: Decimal = Field(gt=0, decimal_places=2)
-    compare_at_price: Decimal | None = Field(default=None, gt=0, decimal_places=2)
+    price: Decimal = Field(gt=0)
+    compare_at_price: Decimal | None = Field(default=None, gt=0)
     currency: str = Field(default="USD", min_length=3, max_length=3)
 
     # NOTE: stock_quantity is no longer accepted here. Inventory is
     # managed exclusively through the Inventory module. Use
     # POST /inventory/stock/add to set initial stock levels.
 
-    weight: Decimal | None = Field(default=None, gt=0, decimal_places=3)
+    weight: Decimal | None = Field(default=None, gt=0)
 
     status: ProductStatus = Field(default=ProductStatus.ACTIVE)
     is_featured: bool = False
     track_inventory: bool = True
+
+    @field_validator("price", "compare_at_price", "weight")
+    @classmethod
+    def _validate_decimal_precision(cls, value: Decimal | None, info) -> Decimal | None:
+        field_name = info.field_name
+        if field_name == "price":
+            return _validate_decimal_places(value, max_places=2, field_name="price")
+        if field_name == "compare_at_price":
+            return _validate_decimal_places(value, max_places=2, field_name="compare_at_price")
+        if field_name == "weight":
+            return _validate_decimal_places(value, max_places=3, field_name="weight")
+        return value
 
     @field_validator("status")
     @classmethod
@@ -102,15 +124,27 @@ class UpdateProductRequest(BaseModel):
     brand: str | None = Field(default=None, max_length=100)
     category: str | None = Field(default=None, max_length=100)
 
-    price: Decimal | None = Field(default=None, gt=0, decimal_places=2)
-    compare_at_price: Decimal | None = Field(default=None, gt=0, decimal_places=2)
+    price: Decimal | None = Field(default=None, gt=0)
+    compare_at_price: Decimal | None = Field(default=None, gt=0)
     currency: str | None = Field(default=None, min_length=3, max_length=3)
 
-    weight: Decimal | None = Field(default=None, gt=0, decimal_places=3)
+    weight: Decimal | None = Field(default=None, gt=0)
 
     status: ProductStatus | None = None
     is_featured: bool | None = None
     track_inventory: bool | None = None
+
+    @field_validator("price", "compare_at_price", "weight")
+    @classmethod
+    def _validate_decimal_precision(cls, value: Decimal | None, info) -> Decimal | None:
+        field_name = info.field_name
+        if field_name == "price":
+            return _validate_decimal_places(value, max_places=2, field_name="price")
+        if field_name == "compare_at_price":
+            return _validate_decimal_places(value, max_places=2, field_name="compare_at_price")
+        if field_name == "weight":
+            return _validate_decimal_places(value, max_places=3, field_name="weight")
+        return value
 
     # NOTE: stock_quantity and reserved_quantity are not updatable here.
     # Inventory is managed through the Inventory module
