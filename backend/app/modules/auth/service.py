@@ -34,6 +34,7 @@ much rarer refresh/logout calls.
 """
 
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from redis import Redis
@@ -53,7 +54,7 @@ from app.db.redis_client import get_redis
 from app.db.session import get_db
 from app.models.user import User
 from app.modules.auth.repository import UserRepository
-from app.schemas.auth import LoginRequest, RefreshRequest, RegisterRequest, TokenResponse
+from app.schemas.auth import LoginRequest, RefreshRequest, RegisterRequest
 
 settings = get_settings()
 
@@ -67,6 +68,14 @@ _DUMMY_HASH = hash_password("dummy-password-for-timing-parity-only!1")
 
 # Redis key prefix for tracked (valid, unrevoked) refresh tokens.
 _REFRESH_TOKEN_KEY_PREFIX = "refresh_token:"
+
+
+@dataclass(frozen=True)
+class TokenPair:
+    """Internal token pair; refresh tokens are deliberately never serialized."""
+
+    access_token: str
+    refresh_token: str
 
 
 class AuthService:
@@ -143,7 +152,7 @@ class AuthService:
         self.db.commit()
         return user
 
-    def login(self, payload: LoginRequest) -> TokenResponse:
+    def login(self, payload: LoginRequest) -> TokenPair:
         """Authenticates the user and issues a fresh access/refresh
         token pair."""
         user = self.authenticate(payload)
@@ -151,7 +160,7 @@ class AuthService:
 
     # --- Refresh ---------------------------------------------------
 
-    def refresh(self, payload: RefreshRequest) -> TokenResponse:
+    def refresh(self, payload: RefreshRequest) -> TokenPair:
         """
         Exchanges a valid, unrevoked refresh token for a brand-new
         access/refresh pair.
@@ -198,7 +207,7 @@ class AuthService:
 
     # --- Internal helpers ---------------------------------------------------
 
-    def _issue_token_pair(self, user: User) -> TokenResponse:
+    def _issue_token_pair(self, user: User) -> TokenPair:
         """Shared by `login` and `refresh`: creates a new access +
         refresh token pair and tracks the new refresh token in Redis."""
         access = create_access_token(subject=str(user.id), role=user.role.value)
@@ -208,7 +217,7 @@ class AuthService:
         ttl_seconds = settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
         self.redis.set(redis_key, str(user.id), ex=ttl_seconds)
 
-        return TokenResponse(access_token=access.token, refresh_token=refresh_token.token)
+        return TokenPair(access_token=access.token, refresh_token=refresh_token.token)
 
 
 # --- FastAPI dependency providers ---------------------------------------------------

@@ -276,7 +276,7 @@ def delete_order(
 )
 def cancel_order(
     order_id: uuid.UUID,
-    payload: CancelOrderRequest = Depends(),
+    payload: CancelOrderRequest,
     current_user: User = Depends(require_order_cancel),
     service=Depends(get_order_service),
 ) -> OrderStatusTransitionResponse:

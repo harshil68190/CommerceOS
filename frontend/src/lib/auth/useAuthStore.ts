@@ -5,10 +5,9 @@ import type { User } from '@/types/api'
 interface AuthState {
   user: User | null
   accessToken: string | null
-  refreshToken: string | null
   redirectReason: 'session_expired' | null
   isHydrated: boolean
-  setAuth: (user: User, accessToken: string, refreshToken: string) => void
+  setAuth: (user: User, accessToken: string) => void
   setAccessToken: (token: string) => void
   setUser: (user: User) => void
   setRedirectReason: (reason: 'session_expired' | null) => void
@@ -20,11 +19,10 @@ export const useAuthStore = create<AuthState>()(
     (set) => ({
       user: null,
       accessToken: null,
-      refreshToken: null,
       redirectReason: null,
       isHydrated: false,
-      setAuth: (user, accessToken, refreshToken) =>
-        set({ user, accessToken, refreshToken, redirectReason: null, isHydrated: true }),
+      setAuth: (user, accessToken) =>
+        set({ user, accessToken, redirectReason: null, isHydrated: true }),
       setAccessToken: (token) => set({ accessToken: token }),
       setUser: (user) => set({ user }),
       setRedirectReason: (reason) => set({ redirectReason: reason }),
@@ -32,17 +30,23 @@ export const useAuthStore = create<AuthState>()(
         set({
           user: null,
           accessToken: null,
-          refreshToken: null,
           isHydrated: true,
         }),
     }),
     {
       name: 'commerceos.auth',
+      version: 1,
       partialize: (state) => ({
         user: state.user,
         accessToken: state.accessToken,
-        refreshToken: state.refreshToken,
       }),
+      // Remove refresh tokens persisted by releases before cookie-only auth.
+      migrate: (persistedState) => {
+        const { refreshToken: _refreshToken, ...state } = persistedState as AuthState & {
+          refreshToken?: unknown
+        }
+        return state
+      },
       onRehydrateStorage: () => (state) => {
         if (state) state.isHydrated = true
       },

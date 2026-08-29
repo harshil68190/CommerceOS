@@ -24,7 +24,7 @@ dependency overrides, dedicated test DB/Redis).
 
 import threading
 from decimal import Decimal
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -471,6 +471,38 @@ class TestOrderLifecycle:
         )
         assert resp.status_code == 200
         assert resp.json()["status"] == "cancelled"
+        detail = authenticated_admin_client.get(f"/api/v1/orders/{order['id']}")
+        assert detail.json()["cancel_reason"] == "Changed mind"
+
+    def test_cancel_rolls_back_when_an_inventory_release_fails(
+        self, authenticated_customer_client: TestClient,
+        authenticated_admin_client: TestClient, inventory_factory,
+        db_session: Session,
+    ):
+        first_product, first_warehouse, _ = _setup_inventory(inventory_factory)
+        second_product, second_warehouse, second_inventory = _setup_inventory(inventory_factory)
+        order = authenticated_customer_client.post(
+            "/api/v1/orders",
+            json=_order_payload([
+                (first_product, first_warehouse, 1),
+                (second_product, second_warehouse, 1),
+            ]),
+        ).json()
+        # Corrupt one reservation to make the second release fail after the
+        # first release has completed; the outer cancellation transaction must
+        # restore the first release and leave the order pending.
+        second_inventory.reserved_quantity = 0
+        db_session.flush()
+
+        response = authenticated_admin_client.patch(
+            f"/api/v1/orders/{order['id']}/cancel", json={"reason": "test"}
+        )
+        _assert_error_envelope(response, status_code=422, error_code="VALIDATION_ERROR")
+        db_session.expire_all()
+        stored = db_session.get(Order, UUID(order["id"]))
+        assert stored.status == OrderStatus.PENDING
+        assert stored.cancel_reason is None
+        assert _get_inventory(db_session, first_product.id, first_warehouse.id).reserved_quantity == 1
 
     def test_cancel_confirmed_order_rejected(
         self, authenticated_customer_client: TestClient,

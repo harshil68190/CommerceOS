@@ -21,7 +21,7 @@ import os
 from functools import lru_cache
 from typing import List
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # SQLAlchemy driver strings normalized to the psycopg (v3) driver so the
@@ -102,6 +102,13 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    REFRESH_TOKEN_COOKIE_NAME: str = "refresh_token"
+    REFRESH_TOKEN_COOKIE_SECURE: bool = True
+    REFRESH_TOKEN_COOKIE_SAME_SITE: str = "lax"
+    AUTH_RATE_LIMIT_WINDOW_SECONDS: int = 60
+    AUTH_LOGIN_RATE_LIMIT: int = 5
+    AUTH_REGISTER_RATE_LIMIT: int = 3
+    AUTH_REFRESH_RATE_LIMIT: int = 10
     # --- CORS ----------------------------------------------------------
     # Comma-separated list of allowed origins, parsed into a list below.
     CORS_ORIGINS: str = "http://localhost:5173"
@@ -126,6 +133,22 @@ class Settings(BaseSettings):
                 "Set DEBUG=false in the production environment."
             )
         return value
+
+    @field_validator("REFRESH_TOKEN_COOKIE_SAME_SITE")
+    @classmethod
+    def _validate_refresh_cookie_same_site(cls, value: str) -> str:
+        value = value.lower()
+        if value not in {"lax", "strict", "none"}:
+            raise ValueError("REFRESH_TOKEN_COOKIE_SAME_SITE must be lax, strict, or none.")
+        return value
+
+    @model_validator(mode="after")
+    def _validate_refresh_cookie_security(self) -> "Settings":
+        if self.ENVIRONMENT == "production" and not self.REFRESH_TOKEN_COOKIE_SECURE:
+            raise ValueError("REFRESH_TOKEN_COOKIE_SECURE must be true in production.")
+        if self.REFRESH_TOKEN_COOKIE_SAME_SITE == "none" and not self.REFRESH_TOKEN_COOKIE_SECURE:
+            raise ValueError("SameSite=None refresh cookies require REFRESH_TOKEN_COOKIE_SECURE=true.")
+        return self
 
     @field_validator("DATABASE_URL")
     @classmethod

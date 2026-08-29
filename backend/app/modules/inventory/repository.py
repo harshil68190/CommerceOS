@@ -17,7 +17,7 @@ Key architectural guarantees:
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
@@ -276,7 +276,7 @@ class InventoryRepository:
         if "version" in fields:
             fields.pop("version")
         fields["version"] = Inventory.version + 1
-        fields["last_stock_update"] = datetime.utcnow()
+        fields["last_stock_update"] = datetime.now(timezone.utc)
 
         stmt = (
             update(Inventory)

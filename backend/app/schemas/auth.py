@@ -128,5 +128,4 @@ class TokenResponse(BaseModel):
     """Response body for POST /auth/login and POST /auth/refresh."""
 
     access_token: str
-    refresh_token: str
     token_type: str = "bearer"

@@ -127,6 +127,28 @@ class TestRegistration:
         error_str = str(body.get("details", {}))
         assert "do not match" in error_str.lower()
 
+    def test_register_rate_limit_exceeded(self, client: TestClient) -> None:
+        settings = get_settings()
+        original_limit = settings.AUTH_REGISTER_RATE_LIMIT
+        settings.AUTH_REGISTER_RATE_LIMIT = 1
+        try:
+            first = client.post("/api/v1/auth/register", json=_register_payload())
+            assert first.status_code == 201, first.text
+            second = client.post(
+                "/api/v1/auth/register",
+                json=_register_payload(email=first.json()["email"]),
+            )
+            _assert_error_envelope(
+                second,
+                status_code=429,
+                error_code="RATE_LIMIT_EXCEEDED",
+                message="Too many requests. Please try again later.",
+            )
+            assert second.json()["details"]["limit"] == 1
+            assert second.headers["retry-after"] == str(settings.AUTH_RATE_LIMIT_WINDOW_SECONDS)
+        finally:
+            settings.AUTH_REGISTER_RATE_LIMIT = original_limit
+
 
 class TestLogin:
     def test_successful_login(self, client: TestClient) -> None:
@@ -142,7 +164,10 @@ class TestLogin:
         body = response.json()
         assert body["token_type"] == "bearer"
         assert body["access_token"]
-        assert body["refresh_token"]
+        assert "refresh_token" not in body
+        cookie = response.headers["set-cookie"]
+        assert "HttpOnly" in cookie
+        assert "SameSite=lax" in cookie
 
     def test_invalid_password(self, client: TestClient) -> None:
         payload = _register_payload()
@@ -173,6 +198,34 @@ class TestLogin:
             message="Invalid email or password.",
         )
 
+    def test_login_rate_limited(self, client: TestClient, redis_client) -> None:
+        payload = _register_payload()
+        client.post("/api/v1/auth/register", json=payload)
+        assert list(redis_client.scan_iter(match="auth:rate_limit:login:*")) == []
+        settings = get_settings()
+        original_limit = settings.AUTH_LOGIN_RATE_LIMIT
+        settings.AUTH_LOGIN_RATE_LIMIT = 1
+        try:
+            first = client.post(
+                "/api/v1/auth/login",
+                data=_login_form(payload["email"], VALID_PASSWORD),
+            )
+            assert first.status_code == 200, first.text
+
+            second = client.post(
+                "/api/v1/auth/login",
+                data=_login_form(payload["email"], VALID_PASSWORD),
+            )
+            _assert_error_envelope(
+                second,
+                status_code=429,
+                error_code="RATE_LIMIT_EXCEEDED",
+                message="Too many requests. Please try again later.",
+            )
+            assert second.json()["details"]["limit"] == 1
+        finally:
+            settings.AUTH_LOGIN_RATE_LIMIT = original_limit
+
     def test_disabled_user(self, client: TestClient, user_factory) -> None:
         user = user_factory(role=UserRole.CUSTOMER, is_active=False)
         response = client.post(
@@ -200,20 +253,40 @@ class TestRefreshAndLogout:
 
     def test_refresh_token(self, client: TestClient) -> None:
         _, tokens = self._login(client)
+        previous_refresh = client.cookies.get("refresh_token")
 
-        response = client.post(
-            "/api/v1/auth/refresh",
-            json={"refresh_token": tokens["refresh_token"]},
-        )
+        response = client.post("/api/v1/auth/refresh")
 
         assert response.status_code == 200
         new_tokens = response.json()
         assert new_tokens["access_token"] != tokens["access_token"]
-        assert new_tokens["refresh_token"] != tokens["refresh_token"]
+        assert "refresh_token" not in new_tokens
+        assert client.cookies.get("refresh_token") != previous_refresh
 
-    @pytest.mark.parametrize("token", ["not-a-token", "Bearer abc"])
+    def test_refresh_rate_limit_exceeded(self, client: TestClient) -> None:
+        self._login(client)
+        settings = get_settings()
+        original_limit = settings.AUTH_REFRESH_RATE_LIMIT
+        settings.AUTH_REFRESH_RATE_LIMIT = 1
+        try:
+            first = client.post("/api/v1/auth/refresh")
+            assert first.status_code == 200, first.text
+
+            second = client.post("/api/v1/auth/refresh")
+            _assert_error_envelope(
+                second,
+                status_code=429,
+                error_code="RATE_LIMIT_EXCEEDED",
+                message="Too many requests. Please try again later.",
+            )
+            assert second.json()["details"]["limit"] == 1
+        finally:
+            settings.AUTH_REFRESH_RATE_LIMIT = original_limit
+
+    @pytest.mark.parametrize("token", ["not-a-token", "******"])
     def test_invalid_refresh_token(self, client: TestClient, token: str) -> None:
-        response = client.post("/api/v1/auth/refresh", json={"refresh_token": token})
+        client.cookies.set("refresh_token", token)
+        response = client.post("/api/v1/auth/refresh")
         _assert_error_envelope(
             response,
             status_code=401,
@@ -231,9 +304,8 @@ class TestRefreshAndLogout:
             secret=settings.JWT_SECRET_KEY,
         )
 
-        response = client.post(
-            "/api/v1/auth/refresh", json={"refresh_token": expired_refresh}
-        )
+        client.cookies.set("refresh_token", expired_refresh)
+        response = client.post("/api/v1/auth/refresh")
         _assert_error_envelope(
             response,
             status_code=401,
@@ -243,16 +315,17 @@ class TestRefreshAndLogout:
 
     def test_logout(self, client: TestClient) -> None:
         _, tokens = self._login(client)
+        refresh_token = client.cookies.get("refresh_token")
         response = client.post(
             "/api/v1/auth/logout",
-            json={"refresh_token": tokens["refresh_token"]},
             headers={"Authorization": f"Bearer {tokens['access_token']}"},
         )
         assert response.status_code == 204
+        assert client.cookies.get("refresh_token") is None
 
-        refresh_again = client.post(
-            "/api/v1/auth/refresh", json={"refresh_token": tokens["refresh_token"]}
-        )
+        # Replaying the pre-logout token proves Redis revocation still works.
+        client.cookies.set("refresh_token", refresh_token)
+        refresh_again = client.post("/api/v1/auth/refresh")
         _assert_error_envelope(
             refresh_again,
             status_code=401,
@@ -263,9 +336,9 @@ class TestRefreshAndLogout:
     def test_logout_with_invalid_token(
         self, authenticated_customer_client: TestClient
     ) -> None:
+        authenticated_customer_client.cookies.set("refresh_token", "bad-refresh-token")
         response = authenticated_customer_client.post(
             "/api/v1/auth/logout",
-            json={"refresh_token": "bad-refresh-token"},
         )
         _assert_error_envelope(
             response,
@@ -350,9 +423,17 @@ class TestProtectedEndpointAndTokenValidation:
         )
 
     def test_tampered_token_rejection(self, client: TestClient, customer_token: str) -> None:
-        replacement = "a" if customer_token[-1] != "a" else "b"
-        tampered = customer_token[:-1] + replacement
-        response = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {tampered}"})
+        header, payload, signature = customer_token.split(".")
+        # Mutate a decoded signature byte, then re-encode it. This cannot
+        # accidentally preserve the original signature through base64 padding.
+        import base64
+        signature_bytes = base64.urlsafe_b64decode(signature + "=" * (-len(signature) % 4))
+        tampered_signature = base64.urlsafe_b64encode(
+            bytes([signature_bytes[0] ^ 1]) + signature_bytes[1:]
+        ).rstrip(b"=").decode()
+        tampered = f"{header}.{payload}.{tampered_signature}"
+        authorization_value = "Bearer " + tampered
+        response = client.get("/api/v1/auth/me", headers={"Authorization": authorization_value})
         _assert_error_envelope(
             response,
             status_code=401,

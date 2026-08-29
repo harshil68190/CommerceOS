@@ -65,6 +65,8 @@ def _error_code_from_http_status(status_code: int) -> str:
         return "CONFLICT"
     if status_code == status.HTTP_422_UNPROCESSABLE_ENTITY:
         return "REQUEST_VALIDATION_ERROR"
+    if status_code == status.HTTP_429_TOO_MANY_REQUESTS:
+        return "RATE_LIMIT_EXCEEDED"
     return "HTTP_ERROR"
 
 
@@ -78,6 +80,11 @@ def register_exception_handlers(app: FastAPI) -> None:
             "Handled application exception: %s", exc.message,
             extra={"error_code": exc.error_code},
         )
+        headers = None
+        if exc.status_code == status.HTTP_429_TOO_MANY_REQUESTS:
+            retry_after = exc.details.get("retry_after_seconds")
+            if retry_after is not None:
+                headers = {"Retry-After": str(retry_after)}
         return JSONResponse(
             status_code=exc.status_code,
             content=_error_envelope(
@@ -86,6 +93,7 @@ def register_exception_handlers(app: FastAPI) -> None:
                 details=exc.details,
                 request=request,
             ),
+            headers=headers,
         )
 
     @app.exception_handler(RequestValidationError)

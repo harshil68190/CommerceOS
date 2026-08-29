@@ -356,12 +356,10 @@ class TestCancelRestoresInventory:
         assert inv.reserved_quantity == 8
         assert inv.available_quantity == 42
 
-        # Cancel the order (customer). The cancel endpoint binds
-        # CancelOrderRequest via Depends(), so the reason is a query
-        # parameter rather than a JSON body.
+        # CancelOrderRequest is a JSON request body.
         cancel_resp = customer_client.patch(
             f"/api/v1/orders/{order_id}/cancel",
-            params={"reason": "Changed my mind"},
+            json={"reason": "Changed my mind"},
         )
         assert cancel_resp.status_code == 200, cancel_resp.text
         body = cancel_resp.json()

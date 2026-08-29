@@ -76,6 +76,13 @@ class UnauthorizedError(AppException):
     error_code = "UNAUTHORIZED"
 
 
+class RateLimitExceededError(AppException):
+    """Raised when a request exceeds the configured rate limit."""
+
+    status_code = 429
+    error_code = "RATE_LIMIT_EXCEEDED"
+
+
 class ForbiddenError(AppException):
     """Raised when an authenticated user lacks permission for the action."""
 

@@ -28,6 +28,7 @@ const BASE_URL = import.meta.env.VITE_API_URL || '/api/v1'
 
 export const apiClient: AxiosInstance = axios.create({
   baseURL: BASE_URL,
+  withCredentials: true,
   headers: { 'Content-Type': 'application/json' },
 })
 
@@ -44,21 +45,16 @@ apiClient.interceptors.request.use((config) => {
 let refreshPromise: Promise<string | null> | null = null
 
 async function refreshAccessToken(): Promise<string | null> {
-  const refreshToken = tokenStorage.getRefreshToken()
-  if (!refreshToken) return null
   try {
-    const { data } = await axios.post<TokenResponse>(
-      `${BASE_URL}/auth/refresh`,
-      { refresh_token: refreshToken },
-    )
-    tokenStorage.setTokens(data.access_token, data.refresh_token)
+    const { data } = await axios.post<TokenResponse>(`${BASE_URL}/auth/refresh`, {}, { withCredentials: true })
+    tokenStorage.setAccessToken(data.access_token)
     return data.access_token
   } catch {
     tokenStorage.clear()
-  useAuthStore.getState().clearAuth()
-  useAuthStore.getState().setRedirectReason('session_expired')
-  return null
-}
+    useAuthStore.getState().clearAuth()
+    useAuthStore.getState().setRedirectReason('session_expired')
+    return null
+  }
 }
 
 interface RetriableConfig extends InternalAxiosRequestConfig {

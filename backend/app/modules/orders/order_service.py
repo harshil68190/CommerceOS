@@ -230,8 +230,9 @@ class OrderService:
                 "Only pending orders can be deleted."
             )
 
-        self._release_order_inventory(order, current_user)
-        self.order_repo.delete(order)
+        with self.db.begin_nested():
+            self._release_order_inventory(order, current_user)
+            self.order_repo.delete(order)
         self.db.commit()
 
     # =========================================================================
@@ -319,14 +320,15 @@ class OrderService:
                 f"{', '.join(s.value for s in CANCELLABLE_STATUSES)} can be cancelled."
             )
 
-        self._release_order_inventory(order, current_user)
+        with self.db.begin_nested():
+            self._release_order_inventory(order, current_user)
+            order = self.order_repo.update(
+                order,
+                status=OrderStatus.CANCELLED,
+                cancel_reason=payload.reason,
+                updated_by=current_user.id,
+            )
 
-        order = self.order_repo.update(
-            order,
-            status=OrderStatus.CANCELLED,
-            cancel_reason=payload.reason if payload else None,
-            updated_by=current_user.id,
-        )
         self.db.commit()
         return order
 
@@ -634,25 +636,23 @@ class OrderService:
         Called during cancellation or deletion of a pending order.
         Only releases if the order currently has reserved stock
         (PENDING status).
+
+        This method is intentionally strict: any failed release raises and
+        aborts the parent DB transaction, so the order stays in its original
+        state instead of being cancelled with orphaned reservations.
         """
         if order.status not in STATUSES_WITH_RESERVATION:
             return
 
         for item in order.items:
-            try:
-                self.stock_service.release_reservation(
-                    product_id=item.product_id,
-                    warehouse_id=item.warehouse_id,
-                    quantity=item.quantity,
-                    current_user_id=current_user.id,
-                    reference_number=order.order_number,
-                    notes=f"Order {order.order_number} cancelled/deleted",
-                )
-            except Exception:
-                logger.exception(
-                    "Failed to release inventory for order "
-                    "%s, item %s", order.order_number, item.id
-                )
+            self.stock_service.release_reservation(
+                product_id=item.product_id,
+                warehouse_id=item.warehouse_id,
+                quantity=item.quantity,
+                current_user_id=current_user.id,
+                reference_number=order.order_number,
+                notes=f"Order {order.order_number} cancelled/deleted",
+            )
 
     def _recalculate_order_totals(self, order: Order) -> None:
         """

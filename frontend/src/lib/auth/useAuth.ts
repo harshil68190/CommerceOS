@@ -12,7 +12,6 @@ export function useAuth() {
   const {
     user,
     accessToken,
-    refreshToken,
     redirectReason,
     isHydrated,
     setAuth,
@@ -32,9 +31,9 @@ export function useAuth() {
   async function login(email: string, password: string) {
     setRedirectReason(null)
     const tokens = await authApi.login({ email, password })
-    tokenStorage.setTokens(tokens.access_token, tokens.refresh_token)
+    tokenStorage.setAccessToken(tokens.access_token)
     const me = await authApi.me()
-    setAuth(me, tokens.access_token, tokens.refresh_token)
+    setAuth(me, tokens.access_token)
     return me
   }
 
@@ -45,12 +44,10 @@ export function useAuth() {
 
   async function logout() {
     setRedirectReason(null)
-    if (refreshToken) {
-      try {
-        await authApi.logout(refreshToken)
-      } catch {
-        // Best-effort; ignore errors on logout.
-      }
+    try {
+      await authApi.logout()
+    } catch {
+      // Best-effort; ignore errors on logout.
     }
     tokenStorage.clear()
     clearAuth()
@@ -59,7 +56,6 @@ export function useAuth() {
   return {
     user,
     accessToken,
-    refreshToken,
     redirectReason,
     isAuthenticated: !!user && !!accessToken,
     isHydrated,

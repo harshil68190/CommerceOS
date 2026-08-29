@@ -27,6 +27,10 @@ from sqlalchemy.orm import Session, sessionmaker
 
 # Must be set before importing app modules that read settings at import time.
 os.environ["COMMERCEOS_ENV_FILE"] = ".env.test"
+# Test settings must not inherit a host-level value such as DEBUG=release.
+os.environ["DEBUG"] = "false"
+# TestClient uses HTTP; production retains the secure-cookie default.
+os.environ["REFRESH_TOKEN_COOKIE_SECURE"] = "false"
 
 from app.core.security import hash_password
 from app.core.config import get_settings
