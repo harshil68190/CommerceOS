@@ -60,6 +60,12 @@ export interface LoginPayload {
   password: string
 }
 
+export interface ProfileUpdatePayload {
+  first_name: string
+  last_name: string
+  phone?: string | null
+}
+
 // --- Products -----------------------------------------------------------
 
 export type ProductStatus = 'active' | 'draft' | 'archived' | 'out_of_stock'

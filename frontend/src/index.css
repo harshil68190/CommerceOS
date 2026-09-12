@@ -4,8 +4,8 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --background: 216 33% 97%;
+    --foreground: 221 39% 15%;
 
     --card: 0 0% 100%;
     --card-foreground: 222.2 84% 4.9%;
@@ -13,26 +13,26 @@
     --popover: 0 0% 100%;
     --popover-foreground: 222.2 84% 4.9%;
 
-    --primary: 222.2 47.4% 11.2%;
+    --primary: 220 67% 29%;
     --primary-foreground: 210 40% 98%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 216 33% 95%;
+    --secondary-foreground: 221 39% 15%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted: 216 30% 94%;
+    --muted-foreground: 215 16% 42%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --accent: 214 39% 93%;
+    --accent-foreground: 220 67% 29%;
 
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --border: 216 22% 89%;
+    --input: 216 22% 86%;
+    --ring: 220 67% 39%;
 
-    --radius: 0.5rem;
+    --radius: 0.75rem;
   }
 
   .dark {
@@ -72,5 +72,14 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+    background-image: radial-gradient(circle at top right, rgba(49, 100, 186, .06), transparent 28rem);
   }
+}
+
+@layer components {
+  .page-eyebrow { @apply text-[11px] font-bold uppercase tracking-[0.16em] text-primary/70; }
+  .page-title { @apply text-2xl font-bold tracking-[-0.035em] text-foreground sm:text-[28px]; }
+  .surface-card { @apply rounded-2xl border border-border/80 bg-card shadow-[0_1px_2px_rgba(18,38,63,.04),0_8px_24px_rgba(18,38,63,.035)]; }
+  .quiet-icon { @apply flex h-9 w-9 items-center justify-center rounded-xl bg-primary/[.07] text-primary; }
 }

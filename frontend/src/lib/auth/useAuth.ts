@@ -42,6 +42,12 @@ export function useAuth() {
     return user
   }
 
+  async function updateProfile(payload: Parameters<typeof authApi.updateMe>[0]) {
+    const updatedUser = await authApi.updateMe(payload)
+    setUser(updatedUser)
+    return updatedUser
+  }
+
   async function logout() {
     setRedirectReason(null)
     try {
@@ -65,5 +71,6 @@ export function useAuth() {
     setUser,
     setRedirectReason,
     refetchMe,
+    updateProfile,
   }
 }

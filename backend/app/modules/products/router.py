@@ -59,6 +59,7 @@ def get_product_service(db: Session = Depends(get_db)) -> ProductService:
     summary="List all products including drafts (admin only)",
 )
 def list_all_products(
+    q: str | None = Query(default=None, description="Free-text search term (name, SKU, description)"),
     category: str | None = Query(default=None),
     brand: str | None = Query(default=None),
     status: str | None = Query(default=None, description="Filter by status: draft, active, archived, out_of_stock"),
@@ -87,6 +88,7 @@ def list_all_products(
             status_enum = None
 
     filters = ProductFilters(
+        query=q,
         category=category,
         brand=brand,
         status=status_enum,
@@ -182,6 +184,7 @@ def archive_product(
     summary="List active products (customer-facing catalog)",
 )
 def list_products(
+    q: str | None = Query(default=None, description="Free-text search term (name, SKU, description)"),
     category: str | None = Query(default=None),
     brand: str | None = Query(default=None),
     featured: bool | None = Query(default=None),
@@ -202,6 +205,7 @@ def list_products(
     router to pass the "right" filter value.
     """
     filters = ProductFilters(
+        query=q,
         category=category,
         brand=brand,
         is_featured=featured,

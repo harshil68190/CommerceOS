@@ -94,6 +94,14 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class ProfileUpdateRequest(BaseModel):
+    """Editable fields for PATCH /auth/me."""
+
+    first_name: str = Field(min_length=1, max_length=100)
+    last_name: str = Field(min_length=1, max_length=100)
+    phone: str | None = Field(default=None, max_length=20)
+
+
 class RefreshRequest(BaseModel):
     """Request body for POST /auth/refresh and POST /auth/logout — both
     operate on a refresh token, so they share this shape."""

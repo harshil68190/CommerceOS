@@ -10,16 +10,32 @@ interface StatCardProps {
   description?: ReactNode
   className?: string
   loading?: boolean
+  onClick?: () => void
 }
 
 /** KPI card used on the dashboard. */
-export function StatCard({ title, value, icon, description, className, loading }: StatCardProps) {
+export function StatCard({ title, value, icon, description, className, loading, onClick }: StatCardProps) {
   return (
-    <Card className={cn('border-0 bg-gradient-to-br from-card to-muted/25 shadow-sm', className)}>
+    <Card
+      className={cn(
+        'surface-card overflow-hidden border-border/80 bg-white shadow-none',
+        onClick && 'cursor-pointer transition hover:border-primary/40 hover:shadow-sm',
+        className,
+      )}
+      onClick={onClick}
+      onKeyDown={(event) => {
+        if (onClick && (event.key === 'Enter' || event.key === ' ')) {
+          event.preventDefault()
+          onClick()
+        }
+      }}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+    >
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
-        <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
+        <CardTitle className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted-foreground">{title}</CardTitle>
         {icon && (
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+          <div className="quiet-icon h-9 w-9">
             {icon}
           </div>
         )}
@@ -28,7 +44,7 @@ export function StatCard({ title, value, icon, description, className, loading }
         {loading ? (
           <Skeleton className="h-7 w-20" />
         ) : (
-          <div className="text-2xl font-semibold tracking-tight">{value}</div>
+          <div className="text-[28px] font-bold tracking-[-0.045em] text-slate-900">{value}</div>
         )}
         {description && (
           <p className="text-xs text-muted-foreground">{description}</p>

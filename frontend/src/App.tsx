@@ -9,6 +9,7 @@ import LoginPage from '@/features/auth/LoginPage'
 import RegisterPage from '@/features/auth/RegisterPage'
 import DashboardPage from '@/features/dashboard/DashboardPage'
 import ProductsPage from '@/features/products/ProductsPage'
+import ProductDetailPage from '@/features/products/ProductDetailPage'
 import WarehousesPage from '@/features/inventory/WarehousesPage'
 import InventoryPage from '@/features/inventory/InventoryPage'
 import OrdersPage from '@/features/orders/OrdersPage'
@@ -28,15 +29,9 @@ export default function App() {
             <Route element={<AppLayout />}>
               <Route path="/" element={<DashboardPage />} />
               <Route path="/products" element={<ProductsPage />} />
+              <Route path="/products/:slug" element={<ProductDetailPage />} />
               <Route path="/orders" element={<OrdersPage />} />
-              <Route
-                path="/orders/:orderId"
-                element={
-                  <RequireRole roles={['admin', 'seller']} fallbackPath="/orders">
-                    <OrderDetailPage />
-                  </RequireRole>
-                }
-              />
+              <Route path="/orders/:orderId" element={<OrderDetailPage />} />
               <Route path="/profile" element={<ProfilePage />} />
               <Route
                 path="/warehouses"

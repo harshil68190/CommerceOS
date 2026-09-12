@@ -18,6 +18,7 @@ import {
   useLowStockReport,
   useWarehouses,
 } from '@/features/inventory/hooks'
+import { useProducts } from '@/features/products/hooks'
 import { formatDate } from '@/lib/utils'
 import type { Inventory, InventoryTransaction } from '@/types/api'
 
@@ -41,6 +42,7 @@ export default function InventoryPage() {
     useLowStockReport(statusFilter)
 
   const { data: warehouseData } = useWarehouses({ page_size: 100 })
+  const { data: productData } = useProducts({ page: 1, page_size: 100, sort: 'name_asc' })
 
   const inventory = invData?.items ?? []
   const invPages = invData?.pages ?? 1
@@ -52,6 +54,8 @@ export default function InventoryPage() {
   const lowStockItems = lowStockData?.items ?? []
 
   const warehouses = warehouseData?.items ?? []
+  const productNames = new Map((productData?.items ?? []).map((product) => [product.id, `${product.name} (${product.sku})`]))
+  const warehouseNames = new Map(warehouses.map((warehouse) => [warehouse.id, `${warehouse.name} (${warehouse.code})`]))
 
   function openMovement(mode: MovementMode, item: Inventory | null) {
     setMovementMode(mode)
@@ -65,8 +69,8 @@ export default function InventoryPage() {
       header: 'Product',
       cell: (i) => (
         <div>
-          <div className="font-medium">{i.product_id}</div>
-          <div className="text-xs text-muted-foreground">Warehouse {i.warehouse_id}</div>
+          <div className="font-medium">{productNames.get(i.product_id) ?? i.product_id}</div>
+          <div className="text-xs text-muted-foreground">{warehouseNames.get(i.warehouse_id) ?? `Warehouse ${i.warehouse_id}`}</div>
         </div>
       ),
     },
@@ -148,6 +152,7 @@ export default function InventoryPage() {
                 error={invError}
                 onRetry={invRefetch}
                 rowKey={(i) => i.id}
+                onRowClick={(i) => openMovement('adjust', i)}
                 page={page}
                 pages={invPages}
                 total={invTotal}

@@ -23,6 +23,7 @@ from app.modules.auth.rate_limit import enforce_rate_limit
 from app.modules.auth.service import AuthService, get_auth_service
 from app.schemas.auth import (
     LoginRequest,
+    ProfileUpdateRequest,
     RefreshRequest,
     RegisterRequest,
     TokenResponse,
@@ -165,3 +166,18 @@ def get_me(current_user: User = Depends(get_current_active_user)) -> UserRespons
     has already done all the work of resolving and validating the
     user."""
     return UserResponse.model_validate(current_user)
+
+
+@router.patch(
+    "/me",
+    response_model=UserResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Update the currently authenticated user's profile",
+)
+def update_me(
+    payload: ProfileUpdateRequest,
+    current_user: User = Depends(get_current_active_user),
+    auth_service: AuthService = Depends(get_auth_service),
+) -> UserResponse:
+    user = auth_service.update_profile(current_user, payload)
+    return UserResponse.model_validate(user)

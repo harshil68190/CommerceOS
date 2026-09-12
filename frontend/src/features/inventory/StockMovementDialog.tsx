@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
 import { Loader2 } from 'lucide-react'
@@ -28,6 +28,7 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { useAddStock, useRemoveStock, useAdjustStock } from '@/features/inventory/hooks'
+import { useProducts } from '@/features/products/hooks'
 import { stockMovementSchema, type StockMovementFormValues } from '@/lib/validators/product.schema'
 import { toast } from '@/stores/toastStore'
 import { ApiClientError } from '@/lib/api/client'
@@ -53,6 +54,7 @@ export function StockMovementDialog({
   const addMutation = useAddStock()
   const removeMutation = useRemoveStock()
   const adjustMutation = useAdjustStock()
+  const { data: productsData } = useProducts({ page: 1, page_size: 100, sort: 'name_asc' })
 
   const [productId, setProductId] = useState<string>('')
   const [warehouseId, setWarehouseId] = useState<string>('')
@@ -69,6 +71,22 @@ export function StockMovementDialog({
       notes: '',
     },
   })
+
+  useEffect(() => {
+    const product = inventory?.product_id ?? ''
+    const warehouse = inventory?.warehouse_id ?? ''
+    setProductId(product)
+    setWarehouseId(warehouse)
+    form.reset({
+      product_id: product,
+      warehouse_id: warehouse,
+      quantity: 1,
+      new_quantity: inventory?.quantity ?? 0,
+      reason: 'adjustment',
+      reference_number: '',
+      notes: '',
+    })
+  }, [inventory, mode, form])
 
   const title =
     mode === 'add' ? 'Add Stock' : mode === 'remove' ? 'Remove Stock' : 'Adjust Stock'
@@ -114,6 +132,8 @@ export function StockMovementDialog({
     } catch (err) {
       if (err instanceof ApiClientError) {
         toast({ title: 'Error', description: err.message, variant: 'destructive' })
+      } else {
+        toast({ title: 'Error', description: 'The stock movement could not be completed.', variant: 'destructive' })
       }
     }
   }
@@ -143,14 +163,16 @@ export function StockMovementDialog({
                   name="product_id"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Product ID</FormLabel>
+                      <FormLabel>Product</FormLabel>
                       <FormControl>
-                        <Input
-                          placeholder="product-uuid"
-                          {...field}
-                          value={productId}
-                          onChange={(e) => { setProductId(e.target.value); field.onChange(e.target.value) }}
-                        />
+                        <Select onValueChange={(value) => { setProductId(value); field.onChange(value) }} value={field.value}>
+                          <SelectTrigger><SelectValue placeholder="Select product" /></SelectTrigger>
+                          <SelectContent>
+                            {(productsData?.items ?? []).map((product) => (
+                              <SelectItem key={product.id} value={product.id}>{product.name} ({product.sku})</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -184,6 +206,16 @@ export function StockMovementDialog({
                   )}
                 />
               </>
+            )}
+            {inventory && (
+              <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
+                <div className="font-medium">
+                  {(productsData?.items ?? []).find((product) => product.id === inventory.product_id)?.name ?? 'Selected product'}
+                </div>
+                <div className="text-muted-foreground">
+                  {warehouses.find((warehouse) => warehouse.id === inventory.warehouse_id)?.name ?? 'Selected warehouse'}
+                </div>
+              </div>
             )}
 
             {mode === 'add' || mode === 'remove' ? (

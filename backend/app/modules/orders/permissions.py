@@ -33,9 +33,13 @@ def require_order_creator(user: User = Depends(get_current_active_user)) -> User
 
 
 def require_order_read(user: User = Depends(get_current_active_user)) -> User:
-    """Dependency for read-only order operations (view orders).
-    Accessible to ADMIN and SELLER."""
-    return _require_role(user, UserRole.ADMIN, UserRole.SELLER)
+    """Dependency for reading an order.
+
+    Customers may read only their own order; that ownership check is made by
+    the router once the order has been loaded. Admins and sellers can read
+    all orders.
+    """
+    return _require_role(user, UserRole.ADMIN, UserRole.SELLER, UserRole.CUSTOMER)
 
 
 def require_order_shipping(user: User = Depends(get_current_active_user)) -> User:
@@ -46,6 +50,11 @@ def require_order_shipping(user: User = Depends(get_current_active_user)) -> Use
 
 def require_order_cancel(user: User = Depends(get_current_active_user)) -> User:
     """Dependency for cancelling orders. Accessible to ADMIN and CUSTOMER."""
+    return _require_role(user, UserRole.ADMIN, UserRole.CUSTOMER)
+
+
+def require_order_payment(user: User = Depends(get_current_active_user)) -> User:
+    """Allows admins or customers paying their own pending orders."""
     return _require_role(user, UserRole.ADMIN, UserRole.CUSTOMER)
 
 

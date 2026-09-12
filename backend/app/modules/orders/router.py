@@ -32,7 +32,8 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, Query, status
 
-from app.models.user import User
+from app.core.exceptions import ForbiddenError
+from app.models.user import User, UserRole
 from app.modules.orders.constants import OrderStatus, PaymentStatus
 from app.modules.orders.dependencies import (
     get_order_service,
@@ -42,6 +43,7 @@ from app.modules.orders.permissions import (
     require_order_cancel,
     require_order_creator,
     require_order_read,
+    require_order_payment,
     require_order_return,
     require_order_shipping,
 )
@@ -209,6 +211,8 @@ def get_order(
     Accessible to ADMIN and SELLER.
     """
     order = service.get_order_by_id(order_id)
+    if current_user.role == UserRole.CUSTOMER and order.customer_id != current_user.id:
+        raise ForbiddenError("You do not have access to this order.")
     return OrderResponse.model_validate(order)
 
 
@@ -312,7 +316,7 @@ def cancel_order(
 )
 def confirm_payment(
     order_id: uuid.UUID,
-    current_user: User = Depends(require_order_admin),
+    current_user: User = Depends(require_order_payment),
     service=Depends(get_order_service),
 ) -> OrderStatusTransitionResponse:
     """
@@ -323,6 +327,9 @@ def confirm_payment(
 
     Admin only.
     """
+    order = service.get_order_by_id(order_id)
+    if current_user.role == UserRole.CUSTOMER and order.customer_id != current_user.id:
+        raise ForbiddenError("You can only confirm payment for your own orders.")
     order = service.confirm_order(order_id, current_user)
     return OrderStatusTransitionResponse(
         id=order.id,

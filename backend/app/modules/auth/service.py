@@ -54,7 +54,7 @@ from app.db.redis_client import get_redis
 from app.db.session import get_db
 from app.models.user import User
 from app.modules.auth.repository import UserRepository
-from app.schemas.auth import LoginRequest, RefreshRequest, RegisterRequest
+from app.schemas.auth import LoginRequest, ProfileUpdateRequest, RefreshRequest, RegisterRequest
 
 settings = get_settings()
 
@@ -120,6 +120,17 @@ class AuthService:
         created = self.repository.create(user)
         self.db.commit()
         return created
+
+    def update_profile(self, user: User, payload: ProfileUpdateRequest) -> User:
+        """Updates the authenticated user's editable profile fields."""
+        updated = self.repository.update(
+            user,
+            first_name=payload.first_name,
+            last_name=payload.last_name,
+            phone=payload.phone,
+        )
+        self.db.commit()
+        return updated
 
     # --- Authentication / login ---------------------------------------------------
 

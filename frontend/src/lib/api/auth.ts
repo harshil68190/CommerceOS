@@ -1,6 +1,7 @@
 import { apiClient } from '@/lib/api/client'
 import type {
   LoginPayload,
+  ProfileUpdatePayload,
   RegisterPayload,
   TokenResponse,
   User,
@@ -34,6 +35,11 @@ export const authApi = {
 
   async me(): Promise<User> {
     const { data } = await apiClient.get<User>('/auth/me')
+    return data
+  },
+
+  async updateMe(payload: ProfileUpdatePayload): Promise<User> {
+    const { data } = await apiClient.patch<User>('/auth/me', payload)
     return data
   },
 }

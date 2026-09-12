@@ -131,14 +131,14 @@ async function runTransition(
           <CardContent className="space-y-2">
             {order.status === 'pending' && (
               <>
-                <RoleGate roles={['admin', 'seller']}>
+                <RoleGate roles={['admin', 'customer']}>
                   <Button
                     className="w-full"
                     disabled={mutating}
                     onClick={() => runTransition(confirmMutation.mutateAsync, 'Payment confirmed')}
                   >
                     {confirmMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Confirm Payment
+                    {user?.role === 'customer' ? 'Pay & Confirm Order' : 'Confirm Payment'}
                   </Button>
                 </RoleGate>
                 {(isOwner || user?.role === 'admin') && (

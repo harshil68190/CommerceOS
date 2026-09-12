@@ -195,6 +195,7 @@ export default function DashboardPage() {
                   description="Active products"
                   icon={<PackageSearch className="h-4 w-4" />}
                   loading={customerProductsQuery.isLoading}
+                  onClick={() => navigate('/products')}
                 />
                 <StatCard
                   title="Open Orders"
@@ -202,6 +203,7 @@ export default function DashboardPage() {
                   description="In progress"
                   icon={<ShoppingCart className="h-4 w-4" />}
                   loading={customerOrdersQuery.isLoading}
+                  onClick={() => navigate('/orders')}
                 />
                 <StatCard
                   title="Recent Spend"
@@ -287,7 +289,7 @@ export default function DashboardPage() {
                       </div>
                     ) : (
                       customerOrdersQuery.data?.items.map((order) => (
-                        <div key={order.id} className="rounded-lg border bg-muted/20 p-3">
+                        <button key={order.id} onClick={() => navigate(`/orders/${order.id}`)} className="w-full rounded-lg border bg-muted/20 p-3 text-left transition hover:border-primary/30 hover:bg-blue-50/40">
                           <div className="flex items-start justify-between gap-3">
                             <div>
                               <div className="font-medium">{order.order_number}</div>
@@ -299,7 +301,7 @@ export default function DashboardPage() {
                             <span className="text-muted-foreground">{order.items.length} items</span>
                             <span className="font-medium">{formatCurrency(order.total)}</span>
                           </div>
-                        </div>
+                        </button>
                       ))
                     )}
                   </CardContent>
@@ -340,6 +342,7 @@ export default function DashboardPage() {
                   description="Catalog coverage"
                   icon={<Package className="h-4 w-4" />}
                   loading={productsQuery.isLoading}
+                  onClick={() => navigate('/products')}
                 />
                 <StatCard
                   title="Pending Orders"
@@ -347,6 +350,7 @@ export default function DashboardPage() {
                   description="Awaiting action"
                   icon={<ShoppingCart className="h-4 w-4" />}
                   loading={ordersQuery.isLoading}
+                  onClick={() => navigate('/orders?status=pending')}
                 />
                 <StatCard
                   title="Low Stock"
@@ -354,6 +358,7 @@ export default function DashboardPage() {
                   description="Need replenishment"
                   icon={<AlertTriangle className="h-4 w-4" />}
                   loading={lowStockQuery.isLoading || outOfStockQuery.isLoading}
+                  onClick={() => navigate('/inventory?status=low_stock')}
                 />
                 <StatCard
                   title="Active Warehouses"
@@ -361,6 +366,7 @@ export default function DashboardPage() {
                   description="Operational sites"
                   icon={<Warehouse className="h-4 w-4" />}
                   loading={warehousesQuery.isLoading}
+                  onClick={() => navigate('/warehouses')}
                 />
               </div>
 
@@ -431,7 +437,7 @@ export default function DashboardPage() {
                       </div>
                     ) : (
                       recentOrders.map((order) => (
-                        <div key={order.id} className="flex items-center justify-between gap-3 rounded-lg border bg-muted/20 p-3">
+                        <button key={order.id} onClick={() => navigate(`/orders/${order.id}`)} className="flex w-full items-center justify-between gap-3 rounded-lg border bg-muted/20 p-3 text-left transition hover:border-primary/30 hover:bg-blue-50/40">
                           <div>
                             <div className="font-medium">{order.order_number}</div>
                             <div className="text-xs text-muted-foreground">
@@ -442,7 +448,7 @@ export default function DashboardPage() {
                             <div className="font-medium">{formatCurrency(order.total)}</div>
                             <div className="mt-1"><StatusBadge status={order.status} /></div>
                           </div>
-                        </div>
+                        </button>
                       ))
                     )}
                   </CardContent>
@@ -459,7 +465,7 @@ export default function DashboardPage() {
                       </div>
                     ) : (
                       stockAlerts.map((item) => (
-                        <div key={`${item.product_id}-${item.warehouse_name}`} className="rounded-lg border bg-muted/20 p-3">
+                        <button onClick={() => navigate('/inventory')} key={`${item.product_id}-${item.warehouse_name}`} className="w-full rounded-lg border bg-muted/20 p-3 text-left transition hover:border-amber-300 hover:bg-amber-50/30">
                           <div className="flex items-start justify-between gap-3">
                             <div>
                               <div className="font-medium">{item.product_name}</div>
@@ -477,7 +483,7 @@ export default function DashboardPage() {
                               style={{ width: `${Math.max(18, (item.available_quantity / Math.max(item.reorder_level, 1)) * 100)}%` }}
                             />
                           </div>
-                        </div>
+                        </button>
                       ))
                     )}
                   </CardContent>

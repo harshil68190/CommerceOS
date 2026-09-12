@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Select,
@@ -9,6 +9,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { DataTable, type Column } from '@/components/data/DataTable'
+import { Button } from '@/components/ui/button'
 import { StatusBadge } from '@/components/widgets/StatusBadge'
 import { useOrders, useMyOrders } from '@/features/orders/hooks'
 import { useAuth } from '@/lib/auth/useAuth'
@@ -17,13 +18,14 @@ import type { Order } from '@/types/api'
 
 export default function OrdersPage() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { user } = useAuth()
   const [page, setPage] = useState(1)
-  const [status, setStatus] = useState<string>('')
+  const [status, setStatus] = useState<string>(() => searchParams.get('status') ?? '')
 
   const isCustomer = user?.role === 'customer'
   const adminFilters = { page, page_size: 20, sort: 'newest', status: status || undefined }
-  const customerOrders = useMyOrders({ page, page_size: 20, sort: 'newest' }, isCustomer)
+  const customerOrders = useMyOrders({ page, page_size: 20, sort: 'newest', status: status || undefined }, isCustomer)
   const adminOrders = useOrders(adminFilters, !isCustomer)
   const { data, isLoading, error, refetch } = isCustomer ? customerOrders : adminOrders
 
@@ -43,23 +45,23 @@ export default function OrdersPage() {
     {
       key: 'order_number',
       header: 'Order',
-      cell: (o) => (
+      cell: (o: Order) => (
         <div>
           <div className="font-medium">{o.order_number}</div>
           <div className="text-xs text-muted-foreground">{formatDate(o.created_at)}</div>
         </div>
       ),
     },
-    {
+    ...(!isCustomer ? [{
       key: 'customer',
       header: 'Customer',
-      cell: (o) => (
+      cell: (o: Order) => (
         <div>
           <div className="font-medium">{o.customer_id.slice(0, 8)}</div>
           <div className="text-xs text-muted-foreground">{o.items.length} items</div>
         </div>
       ),
-    },
+    }] : []),
     { key: 'total', header: 'Total', cell: (o) => <span className="font-medium">{formatCurrency(o.total)}</span> },
     { key: 'status', header: 'Status', cell: (o) => <StatusBadge status={o.status} /> },
     { key: 'payment', header: 'Payment', cell: (o) => <StatusBadge status={o.payment_status} /> },
@@ -69,30 +71,20 @@ export default function OrdersPage() {
     <div className="space-y-4">
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Orders</h1>
+          <p className="page-eyebrow">{isCustomer ? 'Purchase activity' : 'Fulfillment control'}</p><h1 className="mt-1 text-3xl font-bold tracking-[-.04em]">Orders</h1>
           <p className="text-sm text-muted-foreground">
             {isCustomer ? 'Your orders' : 'Manage all orders'}
           </p>
         </div>
-        {!isCustomer && (
-          <div className="w-full max-w-52">
-            <Select value={status} onValueChange={(v) => { setStatus(v === 'all' ? '' : v); setPage(1) }}>
-              <SelectTrigger>
-                <SelectValue placeholder="Filter by status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All statuses</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="confirmed">Confirmed</SelectItem>
-                <SelectItem value="shipped">Shipped</SelectItem>
-                <SelectItem value="delivered">Delivered</SelectItem>
-                <SelectItem value="cancelled">Cancelled</SelectItem>
-                <SelectItem value="returned">Returned</SelectItem>
-                <SelectItem value="refunded">Refunded</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        )}
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+        {isCustomer && <Button onClick={() => navigate('/products')}>Browse catalog</Button>}
+        <div className="w-full max-w-52">
+          <Select value={status || 'all'} onValueChange={(v) => { setStatus(v === 'all' ? '' : v); setPage(1) }}>
+            <SelectTrigger><SelectValue placeholder="Filter by status" /></SelectTrigger>
+            <SelectContent><SelectItem value="all">All statuses</SelectItem><SelectItem value="pending">Pending</SelectItem><SelectItem value="confirmed">Confirmed</SelectItem><SelectItem value="shipped">Shipped</SelectItem><SelectItem value="delivered">Delivered</SelectItem><SelectItem value="cancelled">Cancelled</SelectItem></SelectContent>
+          </Select>
+        </div>
+        </div>
       </div>
 
       {!isCustomer && (
@@ -103,7 +95,7 @@ export default function OrdersPage() {
             { label: 'Shipped', value: summary.shipped },
             { label: 'Delivered', value: summary.delivered },
           ].map((item) => (
-            <Card key={item.label} className="border-0 bg-muted/30 shadow-sm">
+            <Card key={item.label} role="button" tabIndex={0} onClick={() => { setStatus(item.label.toLowerCase()); setPage(1) }} className="cursor-pointer border-0 bg-muted/30 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
               <CardContent className="flex items-center justify-between p-4">
                 <div>
                   <div className="text-sm text-muted-foreground">{item.label}</div>
@@ -128,7 +120,7 @@ export default function OrdersPage() {
             error={error}
             onRetry={refetch}
             rowKey={(o) => o.id}
-            onRowClick={isCustomer ? undefined : (o) => navigate(`/orders/${o.id}`)}
+            onRowClick={(o) => navigate(`/orders/${o.id}`)}
             page={page}
             pages={pages}
             total={total}

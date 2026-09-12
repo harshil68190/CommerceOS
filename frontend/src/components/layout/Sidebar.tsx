@@ -33,11 +33,18 @@ export function Sidebar({ onNavigate }: SidebarProps) {
   })
 
   return (
-    <nav className="flex h-full flex-col gap-1 p-3">
-      <div className="mb-4 flex items-center gap-2 px-2">
-        <Boxes className="h-6 w-6 text-primary" />
-        <span className="text-lg font-bold">CommerceOS</span>
+    <nav className="flex h-full flex-col p-4">
+      <div className="mb-9 flex items-center gap-3 px-2 pt-1">
+        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-white shadow-lg shadow-blue-900/15">
+          <Boxes className="h-5 w-5" />
+        </div>
+        <div>
+          <span className="block text-[17px] font-bold tracking-[-0.04em] text-slate-900">CommerceOS</span>
+          <span className="block text-[10px] font-semibold uppercase tracking-[.16em] text-slate-400">Operations</span>
+        </div>
       </div>
+      <p className="mb-2 px-3 text-[10px] font-bold uppercase tracking-[.16em] text-slate-400">Workspace</p>
+      <div className="space-y-1">
       {nav.map((item) => (
         <NavLink
           key={item.to}
@@ -46,10 +53,10 @@ export function Sidebar({ onNavigate }: SidebarProps) {
           onClick={onNavigate}
           className={({ isActive }) =>
             cn(
-              'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+              'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all',
               isActive
-                ? 'bg-primary text-primary-foreground'
-                : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+                ? 'bg-primary text-primary-foreground shadow-md shadow-blue-950/10'
+                : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800',
             )
           }
         >
@@ -57,6 +64,11 @@ export function Sidebar({ onNavigate }: SidebarProps) {
           {item.label}
         </NavLink>
       ))}
+      </div>
+      <div className="mt-auto rounded-2xl border border-blue-100 bg-blue-50/70 p-3.5">
+        <div className="mb-1 text-xs font-bold text-primary">{user?.role === 'customer' ? 'Customer workspace' : 'Operations workspace'}</div>
+        <p className="text-[11px] leading-4 text-slate-500">{user?.role === 'customer' ? 'Your catalog and order activity, in one place.' : 'Your commerce network is connected and secure.'}</p>
+      </div>
     </nav>
   )
 }
