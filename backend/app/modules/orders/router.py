@@ -42,6 +42,7 @@ from app.modules.orders.permissions import (
     require_order_admin,
     require_order_cancel,
     require_order_creator,
+    require_order_list,
     require_order_read,
     require_order_payment,
     require_order_return,
@@ -119,7 +120,7 @@ def list_orders(
     sort: SortOption | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
-    current_user: User = Depends(require_order_read),
+    current_user: User = Depends(require_order_list),
     service=Depends(get_order_service),
 ) -> OrderListResponse:
     """

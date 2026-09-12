@@ -42,6 +42,12 @@ def require_order_read(user: User = Depends(get_current_active_user)) -> User:
     return _require_role(user, UserRole.ADMIN, UserRole.SELLER, UserRole.CUSTOMER)
 
 
+def require_order_list(user: User = Depends(get_current_active_user)) -> User:
+    """Dependency for listing all orders.
+    Accessible to ADMIN and SELLER."""
+    return _require_role(user, UserRole.ADMIN, UserRole.SELLER)
+
+
 def require_order_shipping(user: User = Depends(get_current_active_user)) -> User:
     """Dependency for updating shipping status (process, ship, deliver).
     Accessible to ADMIN and SELLER."""
@@ -54,8 +60,8 @@ def require_order_cancel(user: User = Depends(get_current_active_user)) -> User:
 
 
 def require_order_payment(user: User = Depends(get_current_active_user)) -> User:
-    """Allows admins or customers paying their own pending orders."""
-    return _require_role(user, UserRole.ADMIN, UserRole.CUSTOMER)
+    """Dependency for confirming order payments. Accessible to ADMIN only."""
+    return _require_role(user, UserRole.ADMIN)
 
 
 def require_order_return(user: User = Depends(get_current_active_user)) -> User:
