@@ -32,6 +32,7 @@ machines, and a deployment-ready Docker/Render setup.
 - [Running Tests](#running-tests)
 - [CI/CD](#cicd)
 - [Deployment](#deployment)
+- [CommerceOS Intelligence](#commerceos-intelligence)
 - [API Documentation](#api-documentation)
 - [Future Improvements / Roadmap](#future-improvements--roadmap)
 - [License](#license)
@@ -425,6 +426,146 @@ CommerceOS deploys to **production** using **Render** via the committed
 
 ---
 
+## CommerceOS Intelligence
+
+CommerceOS Intelligence is an admin-only **inventory decision engine** built on
+the orders and inventory data CommerceOS already stores. It answers three
+questions for every product × warehouse position: *how much will we sell, when
+do we run out, and how much should we order?* No new tables and no seeded or
+mock data: every number is derived from live `orders`, `order_items`,
+`inventory`, `products`, and `warehouses` rows.
+
+### Why it differentiates CommerceOS
+
+Most order-management projects stop at CRUD and a "low stock" flag, which only
+reacts after stock is already thin. Intelligence is **forward-looking and
+explainable**: it converts demand history into a stockout date, a risk level,
+and a purchase quantity, and shows the arithmetic behind each. Every formula is
+a transparent baseline (moving averages, a lead-time risk rule, a classic
+safety-stock reorder point), so each result can be reproduced by hand and
+defended, with no black-box model.
+
+### Architecture
+
+A separate module following the existing Router → Service → Repository layering
+(`backend/app/modules/intelligence/`):
+
+| File | Responsibility |
+|------|----------------|
+| `router.py` | HTTP layer, admin-only dependency, query validation |
+| `service.py` | Orchestration: loads data, runs the engine per position, aggregates KPIs and simulations |
+| `repository.py` | Two read-only SQL queries (stock positions, daily demand); returns plain dataclasses |
+| `engine.py` | Composes forecast → projection → risk → reorder for one position (no I/O) |
+| `forecasting.py` | Daily series, moving averages, σ, confidence, rolling backtest, WAPE (pure) |
+| `projection.py` | Days of cover, stockout day/date, projected inventory (pure) |
+| `risk.py` | Risk classification with human-readable reasons (pure) |
+| `reorder.py` | Safety stock, reorder point, order-up-to, quantity (pure) |
+| `constants.py` | Every tunable number and enum in one place |
+
+Business logic lives in pure functions with no database, clock, or randomness,
+so outputs are deterministic and unit-testable. The clock is injected
+(`get_today` dependency) so API tests pin the date.
+
+Frontend: `frontend/src/features/intelligence/` (dashboard, product detail,
+what-if page), admin-only via `RequireRole`, with sidebar and Dashboard entry
+points.
+
+### Formulas and logic
+
+**Demand.** Units on `CONFIRMED`, `SHIPPED`, and `DELIVERED` orders, summed per
+product × warehouse × calendar day (by `orders.created_at`, UTC), over the last
+60 *completed* days (today is excluded because it is incomplete). `PENDING`
+(unpaid; already visible as reserved stock), `CANCELLED`, `RETURNED`, and
+`REFUNDED` orders are not demand. Days with no sales are zeros. Days before a
+position existed are *not* counted as zero-demand days (history starts at the
+inventory row's creation or first sale), so new products are not under-forecast.
+
+**Forecast.** With `MA_w` = mean of the last `w` days (or all days if fewer):
+
+```
+daily_rate = 0.5 × MA7 + 0.3 × MA14 + 0.2 × MA30
+forecast_demand(H) = daily_rate × H            H ∈ {7, 14, 30}
+σ = sample standard deviation of the last 30 days
+```
+
+Confidence: `none` (no sales), `low` (<14 days of history), `medium` (<30),
+`high` (≥30). Forecast error is measured with a one-step-ahead rolling backtest
+over the last 14 days (each day forecast using only earlier days) and reported
+as WAPE `= Σ|actual − forecast| / Σactual`. The dashboard shows it as a
+percentage ("Forecast error (WAPE)"); lower is better, and it is blank when
+nothing sold in the window.
+
+**Projection and stockout.** `available = quantity − reserved_quantity`.
+
+```
+days_of_cover = available / daily_rate
+stockout day d* = ceil(available / daily_rate)      stockout_date = today + (d* − 1)
+projected_stock(d) = max(0, available − daily_rate × d)
+```
+
+No demand means no stockout date. Zero stock with demand means out today.
+
+**Risk** (`L` = lead time, default 7 days). Boundaries are inclusive on the
+riskier side:
+
+| Days of cover | Risk |
+|---------------|------|
+| ≤ 1 × L (or already out) | High |
+| ≤ 2 × L | Medium |
+| ≤ 4 × L | Low |
+| > 4 × L, or no forecast demand | Healthy |
+
+Floor: if `available ≤ reorder_level` and demand is expected, risk is at least
+Medium. Each result carries plain-English reasons.
+
+**Reorder.**
+
+```
+lead_time_demand = rate × L
+safety_stock     = 1.65 × σ × √L                       (~95% service level)
+reorder_point    = max(ceil(lead_time_demand + safety_stock), reorder_level)
+target_stock     = max(ceil(rate × (L + H) + safety_stock), reorder_level)
+                   capped at max_stock when max_stock > 0
+order_quantity   = ceil(target_stock − available)  if available ≤ reorder_point, else 0
+```
+
+**What-if.** Demand (rate and σ) is scaled by `1 + percent/100`, the whole
+pipeline is re-run, and baseline vs scenario are compared: changed risk
+levels, new projected stockouts, and additional reorder units. Nothing is
+written to the database.
+
+### Endpoints (admin only, under `/api/v1`)
+
+| Method & path | Purpose |
+|---------------|---------|
+| `GET /intelligence/dashboard?horizon_days=7\|14\|30&lead_time_days=7&limit=20` | Risk KPIs, high-risk and reorder lists, forecast-vs-actual trend |
+| `GET /intelligence/products/{product_id}` | Per-warehouse forecast, projection, stockout date, risk reasoning, itemised reorder maths |
+| `POST /intelligence/simulate` | Body: `demand_change_percent` (−100…1000), optional `horizon_days`, `lead_time_days`, `product_id`, `warehouse_id` |
+
+Non-admin roles receive `403`; unauthenticated callers `401`.
+
+### Assumptions and limits
+
+- The schema stores no supplier lead times, so lead time is an explicit
+  assumption (default 7 days, overridable per request) and is echoed in every
+  response.
+- There are no purchase orders, so stock already on order is not netted off
+  recommendations.
+- Demand during past stockouts is under-observed, so forecasts can run low for
+  chronically out-of-stock items.
+- A flat daily rate does not model weekday or seasonal patterns; that is a
+  natural extension, deliberately left out to stay explainable.
+
+### Tests
+
+`tests/test_intelligence_engine.py` (pure forecasting, stockout, risk
+boundaries, reorder maths) and `tests/test_intelligence_api.py` (RBAC,
+empty/no-history, demand definition, per-warehouse separation, dashboard,
+product detail, simulation) run against the real test database. The module is
+at ~99% coverage.
+
+---
+
 ## API Documentation
 
 Interactive API docs are auto-generated by FastAPI:
@@ -443,6 +584,7 @@ Interactive API docs are auto-generated by FastAPI:
 | **Products** | `GET /products` (customer), `GET /products/search`, `GET /products/{slug}`, `GET /products/admin`, `POST /products`, `PUT /products/{id}`, `DELETE /products/{id}`, `PATCH /products/{id}/archive` |
 | **Inventory** | `GET/POST /inventory/warehouses`, `GET/PUT/DELETE /inventory/warehouses/{id}`, `PATCH /inventory/warehouses/{id}/reactivate`, `GET /inventory`, `GET /inventory/products/{id}`, `POST /inventory/stock/{add,remove,adjust}`, `POST /inventory/{reserve,release,confirm-reservation}`, `POST /inventory/transfers`, `GET /inventory/transactions`, `GET /inventory/reports/low-stock`, `POST /inventory/bulk` |
 | **Orders** | `POST /orders`, `GET /orders`, `GET /orders/my`, `GET /orders/{id}`, `PATCH /orders/{id}`, `DELETE /orders/{id}`, `PATCH /orders/{id}/{cancel,confirm-payment,ship,deliver,return,refund}`, plus `/orders/{id}/items` CRUD |
+| **Intelligence** (admin) | `GET /intelligence/dashboard`, `GET /intelligence/products/{id}`, `POST /intelligence/simulate` |
 | **Health** | `GET /health` (liveness), `GET /health/ready` (readiness) |
 
 ### Error format

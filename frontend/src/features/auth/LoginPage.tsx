@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
-import { ArrowRight, Boxes, CheckCircle2, Loader2, ShieldCheck } from 'lucide-react'
+import { Boxes, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -65,20 +65,20 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f5f7fb] p-4 lg:grid lg:grid-cols-[1.08fr_.92fr] lg:p-5">
-      <section className="relative hidden overflow-hidden rounded-3xl bg-[#102a56] p-12 text-white lg:flex lg:flex-col">
-        <div className="absolute -right-32 -top-32 h-96 w-96 rounded-full bg-blue-400/20 blur-3xl" />
-        <div className="relative flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-primary"><Boxes className="h-5 w-5" /></div><span className="text-xl font-bold tracking-[-.04em]">CommerceOS</span></div>
-        <div className="relative my-auto max-w-md"><p className="mb-5 text-xs font-bold uppercase tracking-[.2em] text-blue-200">Commerce operations, clarified</p><h1 className="text-5xl font-bold leading-[1.07] tracking-[-.06em]">Control every moving part of commerce.</h1><p className="mt-6 text-base leading-7 text-blue-100/80">A single, trusted command center for inventory, warehouses, orders, and your product catalog.</p></div>
-        <div className="relative grid grid-cols-2 gap-3"><div className="rounded-2xl border border-white/10 bg-white/10 p-4"><ShieldCheck className="mb-3 h-5 w-5 text-blue-200" /><p className="text-sm font-semibold">Role-aware access</p><p className="mt-1 text-xs text-blue-100/70">The right controls for every team.</p></div><div className="rounded-2xl border border-white/10 bg-white/10 p-4"><CheckCircle2 className="mb-3 h-5 w-5 text-blue-200" /><p className="text-sm font-semibold">Live operations</p><p className="mt-1 text-xs text-blue-100/70">Confident decisions, every day.</p></div></div>
+    <div className="min-h-screen bg-background p-0 lg:grid lg:grid-cols-[1.08fr_.92fr] lg:p-4">
+      <section aria-labelledby="login-product-heading" className="flex flex-col justify-center gap-9 bg-[#102a56] px-6 py-8 text-white sm:px-10 lg:min-h-[calc(100vh-2rem)] lg:justify-between lg:px-12 lg:py-9 xl:px-14">
+        <div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-md bg-white text-primary"><Boxes className="h-5 w-5" aria-hidden="true" /></div><span className="text-xl font-semibold tracking-tight">CommerceOS</span></div>
+        <div className="w-full max-w-[540px] self-center lg:py-10">
+          <h1 id="login-product-heading" className="max-w-[500px] text-[clamp(1.8rem,4vw,3.25rem)] font-semibold leading-[1.08] tracking-[-.04em]">Know what to restock before you run out.</h1>
+          <p className="mt-4 max-w-lg text-sm leading-6 text-blue-100/85 sm:text-base">Inventory intelligence that forecasts demand and helps you plan your next reorder.</p>
+        </div>
+        <div aria-hidden="true" className="hidden lg:block" />
       </section>
-      <section className="flex min-h-[calc(100vh-2rem)] items-center justify-center p-4 sm:p-8">
+      <section className="flex min-h-[440px] items-center justify-center border-x-0 border-b border-border px-5 py-10 sm:px-8 lg:min-h-[calc(100vh-2rem)] lg:border-b-0 lg:border-l lg:px-10">
       <Card className="w-full max-w-[400px] border-0 bg-transparent shadow-none">
         <CardHeader className="px-0 text-left">
-          <div className="mb-8 flex items-center gap-2 lg:hidden"><div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-white"><Boxes className="h-5 w-5" /></div><span className="text-lg font-bold tracking-[-.04em]">CommerceOS</span></div>
-          <p className="page-eyebrow">Welcome back</p>
-          <CardTitle className="mt-2 text-3xl tracking-[-.045em]">Sign in to your workspace</CardTitle>
-          <CardDescription className="mt-2">Enter your details to access your operations console.</CardDescription>
+          <CardTitle className="mt-2 text-[28px] font-semibold tracking-[-.035em]">Sign in</CardTitle>
+          <CardDescription className="mt-2">Enter your email and password to continue.</CardDescription>
         </CardHeader>
         <CardContent>
           <Form {...form}>
@@ -114,9 +114,9 @@ export default function LoginPage() {
                   </FormItem>
                 )}
               />
-              <Button type="submit" className="mt-2 h-11 w-full rounded-xl" disabled={submitting}>
+              <Button type="submit" className="mt-2 h-11 w-full rounded-md" disabled={submitting}>
                 {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Sign In <ArrowRight className="ml-2 h-4 w-4" />
+                Sign In
               </Button>
             </form>
           </Form>

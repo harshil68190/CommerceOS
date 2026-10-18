@@ -33,6 +33,7 @@ from app.modules.auth.router import router as auth_router
 from app.modules.products.router import router as products_router
 from app.modules.inventory.router import router as inventory_router
 from app.modules.orders.router import router as orders_router
+from app.modules.intelligence.router import router as intelligence_router
 
 settings = get_settings()
 
@@ -42,6 +43,7 @@ api_router.include_router(auth_router)
 api_router.include_router(products_router)
 api_router.include_router(inventory_router)
 api_router.include_router(orders_router)
+api_router.include_router(intelligence_router)
 
 
 @api_router.get("/health", tags=["health"], summary="Liveness check")

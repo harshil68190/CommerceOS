@@ -15,6 +15,9 @@ import InventoryPage from '@/features/inventory/InventoryPage'
 import OrdersPage from '@/features/orders/OrdersPage'
 import OrderDetailPage from '@/features/orders/OrderDetailPage'
 import ProfilePage from '@/features/profile/ProfilePage'
+import IntelligenceDashboardPage from '@/features/intelligence/IntelligenceDashboardPage'
+import ProductIntelligencePage from '@/features/intelligence/ProductIntelligencePage'
+import SimulationPage from '@/features/intelligence/SimulationPage'
 import NotFoundPage from '@/features/NotFoundPage'
 
 export default function App() {
@@ -46,6 +49,30 @@ export default function App() {
                 element={
                   <RequireRole roles={['admin', 'inventory_manager']}>
                     <InventoryPage />
+                  </RequireRole>
+                }
+              />
+              <Route
+                path="/intelligence"
+                element={
+                  <RequireRole roles={['admin']}>
+                    <IntelligenceDashboardPage />
+                  </RequireRole>
+                }
+              />
+              <Route
+                path="/intelligence/products/:productId"
+                element={
+                  <RequireRole roles={['admin']}>
+                    <ProductIntelligencePage />
+                  </RequireRole>
+                }
+              />
+              <Route
+                path="/intelligence/simulate"
+                element={
+                  <RequireRole roles={['admin']}>
+                    <SimulationPage />
                   </RequireRole>
                 }
               />

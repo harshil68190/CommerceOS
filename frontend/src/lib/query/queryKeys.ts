@@ -23,6 +23,12 @@ products: {
       ['inventory', 'transactions', filters] as const,
     lowStock: (status: string) => ['inventory', 'low-stock', status] as const,
   },
+  intelligence: {
+    all: ['intelligence'] as const,
+    dashboard: (params: object) => ['intelligence', 'dashboard', params] as const,
+    product: (id: string, params: object) =>
+      ['intelligence', 'product', id, params] as const,
+  },
   orders: {
     all: ['orders'] as const,
     list: (filters: object) => ['orders', 'list', filters] as const,

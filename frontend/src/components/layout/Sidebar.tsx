@@ -6,6 +6,7 @@ import {
   Boxes,
   ShoppingCart,
   User,
+  Sparkles,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/lib/auth/useAuth'
@@ -16,6 +17,7 @@ const baseNav = [
   { to: '/products', label: 'Products', icon: Package, roles: ['admin', 'seller', 'inventory_manager', 'customer'] as UserRole[] },
   { to: '/warehouses', label: 'Warehouses', icon: Warehouse, roles: ['admin', 'inventory_manager'] as UserRole[] },
   { to: '/inventory', label: 'Inventory', icon: Boxes, roles: ['admin', 'inventory_manager'] as UserRole[] },
+  { to: '/intelligence', label: 'Intelligence', icon: Sparkles, roles: ['admin'] as UserRole[] },
   { to: '/orders', label: 'Orders', icon: ShoppingCart, roles: ['admin', 'seller', 'customer'] as UserRole[] },
   { to: '/profile', label: 'Profile', icon: User, roles: ['admin', 'seller', 'inventory_manager', 'customer'] as UserRole[] },
 ]

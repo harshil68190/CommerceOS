@@ -18,7 +18,7 @@ structured.
 > future work**, so the reader (and a recruiter reviewing this repo) is never
 > misled about the current state.
 
-### ✅ Implemented (in the repository)
+### Implemented (in the repository)
 
 | Capability | Where | Notes |
 |-----------|-------|-------|
@@ -38,7 +38,7 @@ structured.
 | Render Blueprint (IaC) | `render.yaml` | managed Postgres + Redis, migration job, web service |
 | React + TypeScript SPA | `frontend/` | auth, dashboard, products, inventory, orders, profile |
 
-### 🚧 Planned (future work — NOT yet implemented)
+### Planned (future work — NOT yet implemented)
 
 | Capability | Notes |
 |-----------|-------|
@@ -711,6 +711,15 @@ The consistent theme: nothing above requires rewriting business logic. Every sca
 - **Event Sourcing for Orders**: replacing `order_status_history` with a full event-sourced order aggregate if audit/replay requirements grow more demanding.
 - **Feature Flags / A/B Testing Infrastructure**: for gradual rollout of catalog/checkout experiments.
 
----
+## 12. CommerceOS Intelligence Module
 
-**Next step (per your instruction):** this document is the frozen reference architecture. When you're ready, we implement one module at a time, starting wherever you'd like — I'd suggest `core/` + `db/` + the `auth` module first, since every other module depends on authentication and the DB session pattern being solid.
+An admin-only decision engine in `backend/app/modules/intelligence/`, following
+the same Router → Service → Repository layering as the other modules. The
+repository runs two read-only queries over existing tables (`inventory` joined
+to `products`/`warehouses`, and `order_items` joined to `orders` grouped by
+product × warehouse × day). The service feeds each stock position into a pure
+engine (`forecasting` → `projection` → `risk` → `reorder`) that has no I/O, so
+results are deterministic and unit-testable. Formulas, endpoints, and
+assumptions are documented in the README section "CommerceOS Intelligence".
+
+---

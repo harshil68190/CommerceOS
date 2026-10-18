@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Activity, AlertTriangle, ArrowRight, Package, PackageSearch, Search, ShoppingCart, TrendingUp, Warehouse } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
+import { Activity, AlertTriangle, ArrowRight, Package, PackageSearch, Search, ShoppingCart, Sparkles, TrendingUp, Warehouse } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import {
   ResponsiveContainer,
@@ -318,6 +318,14 @@ export default function DashboardPage() {
             <p className="text-sm text-muted-foreground">
               Inventory, orders, and fulfillment status across the network.
             </p>
+            {user?.role === 'admin' && (
+              <Button asChild variant="outline" size="sm" className="mt-2">
+                <Link to="/intelligence">
+                  <Sparkles className="mr-2 h-4 w-4" />
+                  Open CommerceOS Intelligence
+                </Link>
+              </Button>
+            )}
           </div>
 
           {hasError ? (
