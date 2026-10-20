@@ -25,7 +25,7 @@ Milestone 4 adds the second: `products`.
 
 from fastapi import APIRouter, HTTPException
 from sqlalchemy import text
-
+from redis import Redis
 from app.core.config import get_settings
 from app.db.session import engine
 from app.workers.redis_client import redis_pool
@@ -88,11 +88,7 @@ def readiness_check() -> dict[str, str]:
 
     # --- Redis -----------------------------------------------------------
     try:
-        connection = redis_pool.get_connection(command_name="ping")
-        try:
-            connection.ping()
-        finally:
-            redis_pool.release(connection)
+        Redis(connection_pool=redis_pool).ping()
     except Exception:
         failures.append("redis")
 
