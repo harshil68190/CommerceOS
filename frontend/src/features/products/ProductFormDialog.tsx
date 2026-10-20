@@ -142,7 +142,7 @@ const form = useForm<ProductFormValues>({
                 </FormItem>
               )}
             />
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <FormField
                 control={form.control}
                 name="sku"
@@ -170,7 +170,7 @@ const form = useForm<ProductFormValues>({
                 )}
               />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <FormField
                 control={form.control}
                 name="brand"
@@ -198,7 +198,7 @@ const form = useForm<ProductFormValues>({
                 )}
               />
             </div>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <FormField
                 control={form.control}
                 name="price"
