@@ -23,8 +23,13 @@ interface LocationState {
   reason?: 'session_expired'
 }
 
-export default function LoginPage() {
-  const { login, setRedirectReason } = useAuth()
+export default function LoginPage({
+  mode = 'customer',
+}: {
+  mode?: 'customer' | 'admin'
+}) {
+  const { login, logout, setRedirectReason } = useAuth()
+  const isAdminLogin = mode === 'admin'
   const navigate = useNavigate()
   const location = useLocation()
   const [serverError, setServerError] = useState<string | null>(null)
@@ -51,7 +56,19 @@ export default function LoginPage() {
     setServerError(null)
     setRedirectReason(null)
     try {
-      await login(values.email, values.password)
+      const user = await login(values.email, values.password)
+      if (
+        (isAdminLogin && user.role !== 'admin') ||
+        (!isAdminLogin && user.role === 'admin')
+      ) {
+        await logout()
+        setServerError(
+          isAdminLogin
+            ? 'This account does not have administrator access.'
+            : 'Administrator accounts must sign in through the admin portal.',
+        )
+        return
+      }
       navigate(from, { replace: true })
     } catch (err) {
       if (err instanceof ApiClientError) {
@@ -69,16 +86,33 @@ export default function LoginPage() {
       <section aria-labelledby="login-product-heading" className="flex flex-col justify-center gap-9 bg-[#102a56] px-6 py-8 text-white sm:px-10 lg:min-h-[calc(100vh-2rem)] lg:justify-between lg:px-12 lg:py-9 xl:px-14">
         <div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-md bg-white text-primary"><Boxes className="h-5 w-5" aria-hidden="true" /></div><span className="text-xl font-semibold tracking-tight">CommerceOS</span></div>
         <div className="w-full max-w-[540px] self-center lg:py-10">
-          <h1 id="login-product-heading" className="max-w-[500px] text-[clamp(1.8rem,4vw,3.25rem)] font-semibold leading-[1.08] tracking-[-.04em]">Know what to restock before you run out.</h1>
-          <p className="mt-4 max-w-lg text-sm leading-6 text-blue-100/85 sm:text-base">Inventory intelligence that forecasts demand and helps you plan your next reorder.</p>
+          <h1
+            id="login-product-heading"
+            className="max-w-[500px] text-[clamp(1.8rem,4vw,3.25rem)] font-semibold leading-[1.08] tracking-[-.04em]"
+          >
+            {isAdminLogin
+              ? 'Run your commerce operations with confidence.'
+              : 'Know what to restock before you run out.'}
+          </h1>
+          <p className="mt-4 max-w-lg text-sm leading-6 text-blue-100/85 sm:text-base">
+            {isAdminLogin
+              ? 'Manage your catalog, inventory, orders, and demand intelligence from one secure workspace.'
+              : 'Inventory intelligence that forecasts demand and helps you plan your next reorder.'}
+          </p>
         </div>
         <div aria-hidden="true" className="hidden lg:block" />
       </section>
       <section className="flex min-h-[440px] items-center justify-center border-x-0 border-b border-border px-5 py-10 sm:px-8 lg:min-h-[calc(100vh-2rem)] lg:border-b-0 lg:border-l lg:px-10">
       <Card className="w-full max-w-[400px] border-0 bg-transparent shadow-none">
         <CardHeader className="px-0 text-left">
-          <CardTitle className="mt-2 text-[28px] font-semibold tracking-[-.035em]">Sign in</CardTitle>
-          <CardDescription className="mt-2">Enter your email and password to continue.</CardDescription>
+          <CardTitle className="mt-2 text-[28px] font-semibold tracking-[-.035em]">
+            {isAdminLogin ? 'Administrator sign in' : 'Sign in'}
+          </CardTitle>
+          <CardDescription className="mt-2">
+            {isAdminLogin
+              ? 'Use your administrator account to access the operations console.'
+              : 'Enter your email and password to continue.'}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <Form {...form}>
@@ -120,12 +154,38 @@ export default function LoginPage() {
               </Button>
             </form>
           </Form>
+          {isAdminLogin ? (
           <p className="mt-4 text-center text-sm text-muted-foreground">
-            Don't have an account?{' '}
-            <Link to="/register" className="font-medium text-primary hover:underline">
-              Register
+            Customer account?{' '}
+            <Link
+              to="/login"
+              className="font-medium text-primary hover:underline"
+            >
+              Sign in to the customer portal
             </Link>
           </p>
+        ) : (
+          <>
+            <p className="mt-4 text-center text-sm text-muted-foreground">
+              Don't have an account?{' '}
+              <Link
+                to="/register"
+                className="font-medium text-primary hover:underline"
+              >
+                Register
+              </Link>
+            </p>
+            <p className="mt-3 text-center text-sm text-muted-foreground">
+              Administrator?{' '}
+              <Link
+                to="/admin/login"
+                className="font-medium text-primary hover:underline"
+              >
+                Sign in to the admin portal
+              </Link>
+            </p>
+          </>
+        )}
         </CardContent>
       </Card>
       </section>
