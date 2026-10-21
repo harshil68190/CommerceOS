@@ -19,7 +19,7 @@ export default function OrderDetailPage() {
   const { user } = useAuth()
 
   const { data: order, isLoading, isError, error, refetch } = useOrder(orderId || '')
-
+  const acceptMutation = useOrderTransition('accept')
   const cancelMutation = useOrderTransition('cancel')
   const confirmMutation = useOrderTransition('confirmPayment')
   const shipMutation = useOrderTransition('ship')
@@ -59,7 +59,8 @@ async function runTransition(
     shipMutation.isPending ||
     deliverMutation.isPending ||
     returnMutation.isPending ||
-    refundMutation.isPending
+    refundMutation.isPending ||
+    acceptMutation.isPending
 
   return (
     <div className="space-y-4">
@@ -91,6 +92,16 @@ async function runTransition(
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">Payment</span>
               <StatusBadge status={order.payment_status} />
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">
+                Payment Method
+              </span>
+              <span className="text-sm font-medium">
+                {order.payment_method === 'cod'
+                  ? 'Cash on Delivery (COD)'
+                  : order.payment_method}
+              </span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">Version</span>
@@ -131,24 +142,42 @@ async function runTransition(
           <CardContent className="space-y-2">
             {order.status === 'pending' && (
               <>
-                <RoleGate roles={['admin', 'customer']}>
+                <RoleGate roles={['admin']}>
                   <Button
                     className="w-full"
                     disabled={mutating}
-                    onClick={() => runTransition(confirmMutation.mutateAsync, 'Payment confirmed')}
+                    onClick={() =>
+                      runTransition(
+                        acceptMutation.mutateAsync,
+                        'Order accepted',
+                      )
+                    }
                   >
-                    {confirmMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    {user?.role === 'customer' ? 'Pay & Confirm Order' : 'Confirm Payment'}
+                    {acceptMutation.isPending && (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    )}
+                    Accept Order
                   </Button>
                 </RoleGate>
+
+                {isOwner && (
+                  <p className="text-sm text-muted-foreground">
+                    Your order is awaiting admin acceptance. Payment is due on delivery.
+                  </p>
+                )}
+
                 {(isOwner || user?.role === 'admin') && (
                   <Button
                     variant="destructive"
                     className="w-full"
                     disabled={mutating}
-                    onClick={() => runTransition(cancelMutation.mutateAsync, 'Order cancelled')}
+                    onClick={() =>
+                      runTransition(cancelMutation.mutateAsync, 'Order cancelled')
+                    }
                   >
-                    {cancelMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    {cancelMutation.isPending && (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    )}
                     Cancel Order
                   </Button>
                 )}
@@ -179,17 +208,44 @@ async function runTransition(
               </RoleGate>
             )}
             {order.status === 'delivered' && (
-              <RoleGate roles={['admin', 'seller']}>
-                <Button
-                  className="w-full"
-                  variant="outline"
-                  disabled={mutating}
-                  onClick={() => runTransition(returnMutation.mutateAsync, 'Return processed')}
-                >
-                  {returnMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Process Return
-                </Button>
-              </RoleGate>
+              <>
+                {order.payment_method === 'cod' &&
+                  order.payment_status === 'unpaid' && (
+                    <RoleGate roles={['admin']}>
+                      <Button
+                        className="w-full"
+                        disabled={mutating}
+                        onClick={() =>
+                          runTransition(
+                            confirmMutation.mutateAsync,
+                            'COD payment recorded',
+                          )
+                        }
+                      >
+                        {confirmMutation.isPending && (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        )}
+                        Record COD Payment
+                      </Button>
+                    </RoleGate>
+                  )}
+
+                <RoleGate roles={['admin', 'seller']}>
+                  <Button
+                    className="w-full"
+                    variant="outline"
+                    disabled={mutating}
+                    onClick={() =>
+                      runTransition(returnMutation.mutateAsync, 'Return processed')
+                    }
+                  >
+                    {returnMutation.isPending && (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    )}
+                    Process Return
+                  </Button>
+                </RoleGate>
+              </>
             )}
             {order.status === 'returned' && (
               <RoleGate roles={['admin']}>

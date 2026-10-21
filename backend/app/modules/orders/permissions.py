@@ -31,6 +31,11 @@ def require_order_creator(user: User = Depends(get_current_active_user)) -> User
     """Dependency for creating orders. Accessible to ADMIN and CUSTOMER."""
     return _require_role(user, UserRole.ADMIN, UserRole.CUSTOMER)
 
+def require_order_accept(
+    user: User = Depends(get_current_active_user),
+) -> User:
+    """Only administrators can accept orders."""
+    return _require_role(user, UserRole.ADMIN)
 
 def require_order_read(user: User = Depends(get_current_active_user)) -> User:
     """Dependency for reading an order.

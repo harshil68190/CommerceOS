@@ -229,11 +229,18 @@ export default function ProductsPage() {
           return
         }
       }
-      const order = await createOrderMutation.mutateAsync({ items, notes: 'Customer checkout from catalog' })
+      const order = await createOrderMutation.mutateAsync({
+        items,
+        payment_method: 'cod',
+        notes: 'Customer checkout from catalog',
+      })
       setCart([])
       setCartOpen(false)
-      toast({ title: 'Order confirmed', description: `${order.order_number} is now pending in My Orders.`, variant: 'success' })
-      navigate('/orders')
+      toast({
+        title: 'Order placed',
+        description: `${order.order_number} is awaiting admin acceptance. Payment is due on delivery.`,
+        variant: 'success',
+      })
     } catch (error) {
       toast({ title: 'Checkout failed', description: error instanceof Error ? error.message : 'Please try again.', variant: 'destructive' })
     }

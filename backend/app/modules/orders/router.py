@@ -43,6 +43,7 @@ from app.modules.orders.permissions import (
     require_order_cancel,
     require_order_creator,
     require_order_list,
+    require_order_accept,
     require_order_read,
     require_order_payment,
     require_order_return,
@@ -310,28 +311,17 @@ def cancel_order(
 
 
 @router.patch(
-    "/{order_id}/confirm-payment",
+    "/{order_id}/accept",
     response_model=OrderStatusTransitionResponse,
     status_code=status.HTTP_200_OK,
-    summary="Confirm payment for an order",
+    summary="Accept a pending order",
 )
-def confirm_payment(
+def accept_order(
     order_id: uuid.UUID,
-    current_user: User = Depends(require_order_payment),
+    current_user: User = Depends(require_order_accept),
     service=Depends(get_order_service),
 ) -> OrderStatusTransitionResponse:
-    """
-    Confirms payment for an order.
-
-    PENDING -> CONFIRMED. Payment status changes to PAID.
-    Converts reservation to confirmed sale (deducts stock).
-
-    Admin only.
-    """
-    order = service.get_order_by_id(order_id)
-    if current_user.role == UserRole.CUSTOMER and order.customer_id != current_user.id:
-        raise ForbiddenError("You can only confirm payment for your own orders.")
-    order = service.confirm_order(order_id, current_user)
+    order = service.accept_order(order_id, current_user)
     return OrderStatusTransitionResponse(
         id=order.id,
         order_number=order.order_number,
@@ -339,9 +329,31 @@ def confirm_payment(
         payment_status=order.payment_status,
         version=order.version,
         updated_at=order.updated_at,
-        message="Payment confirmed. Stock deducted.",
+        message="Order accepted. Payment is due on delivery.",
     )
 
+
+@router.patch(
+    "/{order_id}/confirm-payment",
+    response_model=OrderStatusTransitionResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Record collected COD payment",
+)
+def confirm_payment(
+    order_id: uuid.UUID,
+    current_user: User = Depends(require_order_payment),
+    service=Depends(get_order_service),
+) -> OrderStatusTransitionResponse:
+    order = service.confirm_cod_payment(order_id, current_user)
+    return OrderStatusTransitionResponse(
+        id=order.id,
+        order_number=order.order_number,
+        status=order.status,
+        payment_status=order.payment_status,
+        version=order.version,
+        updated_at=order.updated_at,
+        message="Cash-on-delivery payment recorded.",
+    )
 
 # =========================================================================
 # Ship Order

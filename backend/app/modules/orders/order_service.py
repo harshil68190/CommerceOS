@@ -135,10 +135,11 @@ class OrderService:
             shipping_cost=payload.shipping_cost,
             discount=payload.discount,
             total=total,
-            payment_status=PaymentStatus.UNPAID,
             notes=payload.notes,
             created_by=current_user.id,
             updated_by=current_user.id,
+            payment_status=PaymentStatus.UNPAID,
+            payment_method=payload.payment_method,
         )
         with self.db.begin_nested():
             order = self.order_repo.create(order)
@@ -239,29 +240,57 @@ class OrderService:
     # Confirm Payment
     # =========================================================================
 
-    def confirm_order(self, order_id: uuid.UUID, current_user: User) -> Order:
-        """PENDING -> CONFIRMED. Payment successful."""
-        order = self._get_order_or_404(order_id)
-        self._validate_transition(order, OrderStatus.CONFIRMED)
+    def accept_order(
+        self, order_id: uuid.UUID, current_user: User
+    ) -> Order:
+            """Accept a pending COD order without marking it paid."""
+            order = self._get_order_or_404(order_id)
+            self._validate_transition(order, OrderStatus.CONFIRMED)
 
-        with self.db.begin_nested():
-            order = self.order_repo.update(
-                order,
-                status=OrderStatus.CONFIRMED,
-                payment_status=PaymentStatus.PAID,
-                updated_by=current_user.id,
-            )
-
-            for item in order.items:
-                self.stock_service.confirm_reservation(
-                    product_id=item.product_id,
-                    warehouse_id=item.warehouse_id,
-                    quantity=item.quantity,
-                    current_user_id=current_user.id,
-                    reference_number=order.order_number,
-                    notes=f"Order {order.order_number} confirmed",
+            with self.db.begin_nested():
+                order = self.order_repo.update(
+                    order,
+                    status=OrderStatus.CONFIRMED,
+                    updated_by=current_user.id,
                 )
 
+                for item in order.items:
+                    self.stock_service.confirm_reservation(
+                        product_id=item.product_id,
+                        warehouse_id=item.warehouse_id,
+                        quantity=item.quantity,
+                        current_user_id=current_user.id,
+                        reference_number=order.order_number,
+                        notes=f"Order {order.order_number} accepted",
+                    )
+
+            self.db.commit()
+            return order
+
+    def confirm_cod_payment(
+        self, order_id: uuid.UUID, current_user: User
+    ) -> Order:
+        """Record COD collection after delivery, without changing order status."""
+        order = self._get_order_or_404(order_id)
+
+        if order.payment_method != "cod":
+            raise ValidationError(
+                "Only Cash on Delivery orders can use this action."
+            )
+
+        if order.status != OrderStatus.DELIVERED:
+            raise InvalidOrderStatusTransitionError(
+                "COD payment can only be recorded after delivery."
+            )
+
+        if order.payment_status != PaymentStatus.UNPAID:
+            raise ValidationError("Payment has already been recorded.")
+
+        order = self.order_repo.update(
+            order,
+            payment_status=PaymentStatus.PAID,
+            updated_by=current_user.id,
+        )
         self.db.commit()
         return order
 

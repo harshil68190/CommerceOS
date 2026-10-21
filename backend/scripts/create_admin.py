@@ -38,6 +38,7 @@ def main() -> int:
             existing.role = UserRole.ADMIN
             existing.is_active = True
             existing.is_verified = True
+            existing.hashed_password = hash_password(args.password)
             if not existing.username:
                 existing.username = username
             db.commit()

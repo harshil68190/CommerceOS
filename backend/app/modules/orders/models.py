@@ -126,6 +126,12 @@ class Order(Base):
         index=True,
         nullable=False,
     )
+    payment_method: Mapped[str] = mapped_column(
+        String(20),
+        default="cod",
+        server_default="cod",
+        nullable=False,
+    )
 
     # --- Workflow fields ---------------------------------------------------
     reserved_until: Mapped[datetime | None] = mapped_column(nullable=True)

@@ -20,17 +20,11 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 from math import ceil
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.modules.orders.constants import OrderStatus, PaymentStatus
-
-
-# =========================================================================
-# Order Item Schemas
-# =========================================================================
-
 
 class OrderItemCreateRequest(BaseModel):
     """
@@ -61,12 +55,6 @@ class OrderItemResponse(BaseModel):
     line_total: Decimal
     created_at: datetime
 
-
-# =========================================================================
-# Order Schemas
-# =========================================================================
-
-
 class OrderCreateRequest(BaseModel):
     """
     Request body for POST /orders.
@@ -80,7 +68,10 @@ class OrderCreateRequest(BaseModel):
     - shipping_cost: if applicable (default 0).
     - discount: if applicable (default 0).
     """
-
+    payment_method: Literal["cod"] = Field(
+        default="cod",
+        description="Payment method; currently Cash on Delivery only.",
+    )
     items: list[OrderItemCreateRequest] = Field(
         min_length=1,
         description="Items to order (at least one required).",
@@ -158,6 +149,7 @@ class OrderResponse(BaseModel):
     discount: Decimal
     total: Decimal
     payment_status: PaymentStatus
+    payment_method: str
     notes: str | None
     reserved_until: datetime | None
     cancel_reason: str | None

@@ -61,6 +61,13 @@ export const ordersApi = {
     return data
   },
 
+  async accept(id: string): Promise<OrderStatusTransitionResponse> {
+    const { data } = await apiClient.patch<OrderStatusTransitionResponse>(
+      `/orders/${id}/accept`,
+    )
+    return data
+  },
+
   async confirmPayment(id: string): Promise<OrderStatusTransitionResponse> {
     const { data } = await apiClient.patch<OrderStatusTransitionResponse>(
       `/orders/${id}/confirm-payment`,

@@ -314,6 +314,7 @@ export interface Order {
   order_number: string
   customer_id: string
   status: OrderStatus
+  payment_method: 'cod'
   subtotal: string
   tax: string
   shipping_cost: string
@@ -340,6 +341,7 @@ export interface OrderCreatePayload {
   notes?: string | null
   shipping_cost?: string
   discount?: string
+  payment_method?: 'cod'
 }
 
 export interface OrderUpdatePayload {

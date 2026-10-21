@@ -279,11 +279,11 @@ class TestFullLifecycleE2E:
 
         # -- Payment confirmed (admin) -> deducts stock ------------------
         confirm_resp = authenticated_admin_client.patch(
-            f"/api/v1/orders/{order_id}/confirm-payment"
+            f"/api/v1/orders/{order_id}/accept"
         )
         assert confirm_resp.status_code == 200, confirm_resp.text
         assert confirm_resp.json()["status"] == "confirmed"
-        assert confirm_resp.json()["payment_status"] == "paid"
+        assert confirm_resp.json()["payment_status"] == "unpaid"
 
         inv = _get_inventory(db_session, product["id"], warehouse["id"])
         assert inv.quantity == 90
@@ -303,6 +303,14 @@ class TestFullLifecycleE2E:
         )
         assert deliver_resp.status_code == 200, deliver_resp.text
         assert deliver_resp.json()["status"] == "delivered"
+        assert deliver_resp.json()["payment_status"] == "unpaid"
+        # Record COD payment after delivery.
+        payment_resp = authenticated_admin_client.patch(
+            f"/api/v1/orders/{order_id}/confirm-payment"
+        )
+        assert payment_resp.status_code == 200, payment_resp.text
+        assert payment_resp.json()["status"] == "delivered"
+        assert payment_resp.json()["payment_status"] == "paid"
 
         # -- Final inventory verified (stock deducted once, no reservation) --
         inv = _get_inventory(db_session, product["id"], warehouse["id"])
@@ -600,7 +608,7 @@ class TestConfirmationFailureConsistent:
         assert release_resp.status_code == 200, release_resp.text
 
         confirm_resp = authenticated_admin_client.patch(
-            f"/api/v1/orders/{order_id}/confirm-payment"
+            f"/api/v1/orders/{order_id}/accept"
         )
         # Confirmation fails (reservation state mismatch) -> 422.
         assert confirm_resp.status_code == 422, confirm_resp.text

@@ -409,11 +409,11 @@ class TestOrderLifecycle:
 
         # Confirm (admin)
         resp = authenticated_admin_client.patch(
-            f"/api/v1/orders/{order_id}/confirm-payment"
+            f"/api/v1/orders/{order_id}/accept"
         )
         assert resp.status_code == 200
         assert resp.json()["status"] == "confirmed"
-        assert resp.json()["payment_status"] == "paid"
+        assert resp.json()["payment_status"] == "unpaid"
 
         # Ship (admin)
         resp = authenticated_admin_client.patch(f"/api/v1/orders/{order_id}/ship")
@@ -426,6 +426,12 @@ class TestOrderLifecycle:
         )
         assert resp.status_code == 200
         assert resp.json()["status"] == "delivered"
+        payment_resp = authenticated_admin_client.patch(
+            f"/api/v1/orders/{order_id}/confirm-payment"
+        )
+        assert payment_resp.status_code == 200
+        assert payment_resp.json()["status"] == "delivered"
+        assert payment_resp.json()["payment_status"] == "paid"
 
     def test_ship_pending_order_rejected(
         self, authenticated_customer_client: TestClient,
@@ -512,7 +518,7 @@ class TestOrderLifecycle:
             authenticated_customer_client, inventory_factory
         )
         authenticated_admin_client.patch(
-            f"/api/v1/orders/{order['id']}/confirm-payment"
+            f"/api/v1/orders/{order['id']}/accept"
         )
         resp = authenticated_admin_client.patch(
             f"/api/v1/orders/{order['id']}/cancel",
@@ -530,7 +536,7 @@ class TestOrderLifecycle:
             authenticated_customer_client, inventory_factory
         )
         order_id = order["id"]
-        authenticated_admin_client.patch(f"/api/v1/orders/{order_id}/confirm-payment")
+        authenticated_admin_client.patch(f"/api/v1/orders/{order_id}/accept")
         authenticated_admin_client.patch(f"/api/v1/orders/{order_id}/ship")
         authenticated_admin_client.patch(f"/api/v1/orders/{order_id}/deliver")
 
@@ -577,7 +583,7 @@ class TestOrderInventoryIntegration:
             "/api/v1/orders", json=payload
         ).json()
         resp = authenticated_admin_client.patch(
-            f"/api/v1/orders/{order['id']}/confirm-payment"
+            f"/api/v1/orders/{order['id']}/accept"
         )
         assert resp.status_code == 200
         inv = _get_inventory(db_session, product.id, warehouse.id)
@@ -615,7 +621,7 @@ class TestOrderInventoryIntegration:
             "/api/v1/orders", json=payload
         ).json()
         order_id = order["id"]
-        authenticated_admin_client.patch(f"/api/v1/orders/{order_id}/confirm-payment")
+        authenticated_admin_client.patch(f"/api/v1/orders/{order_id}/accept")
         authenticated_admin_client.patch(f"/api/v1/orders/{order_id}/ship")
         authenticated_admin_client.patch(f"/api/v1/orders/{order_id}/deliver")
         # Stock finalized at confirm; delivery must not change it further.
@@ -711,7 +717,7 @@ class TestOrderTransactionIntegrity:
             },
         )
         resp = authenticated_admin_client.patch(
-            f"/api/v1/orders/{order_id}/confirm-payment"
+            f"/api/v1/orders/{order_id}/accept"
         )
         assert resp.status_code == 422
         # Order must NOT have advanced to confirmed (no partial write).
@@ -894,7 +900,7 @@ class TestOrderRBAC:
             "/api/v1/orders", json=_order_payload([(product, warehouse, 1)])
         ).json()
         order_id = order["id"]
-        authenticated_admin_client.patch(f"/api/v1/orders/{order_id}/confirm-payment")
+        authenticated_admin_client.patch(f"/api/v1/orders/{order_id}/accept")
         resp = authenticated_seller_client.patch(f"/api/v1/orders/{order_id}/ship")
         assert resp.status_code == 200
         assert resp.json()["status"] == "shipped"
