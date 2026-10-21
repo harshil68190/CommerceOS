@@ -86,15 +86,34 @@ export default function ProductsPage() {
   }
 
   function addToCart(product: Product) {
+    const cartCurrency = cart[0]?.product.currency.toUpperCase()
+    const productCurrency = product.currency.toUpperCase()
+
+    if (cartCurrency && cartCurrency !== productCurrency) {
+      toast({
+        title: 'One currency per order',
+        description: `Your cart uses ${cartCurrency}. Remove its items before adding ${productCurrency} products.`,
+        variant: 'destructive',
+      })
+      return
+    }
     setCart((current) => {
       const existing = current.find((item) => item.product.id === product.id)
       if (existing) {
-        return current.map((item) => item.product.id === product.id ? { ...item, quantity: item.quantity + 1 } : item)
+        return current.map((item) =>
+          item.product.id === product.id
+            ? { ...item, quantity: item.quantity + 1 }
+            : item,
+        )
       }
       return [...current, { product, quantity: 1 }]
     })
     setSelectedProduct(null)
-    toast({ title: 'Added to cart', description: `${product.name} is ready for checkout.`, variant: 'success' })
+    toast({
+      title: 'Added to cart',
+      description: `${product.name} is ready for checkout.`,
+      variant: 'success',
+    })
   }
 
   const columns: Column<Product>[] = [
@@ -211,6 +230,17 @@ export default function ProductsPage() {
 
   async function checkoutCart() {
     if (cart.length === 0) return
+    const currencies = new Set(
+      cart.map((item) => item.product.currency.toUpperCase()),
+    )
+    if (currencies.size !== 1) {
+      toast({
+        title: 'One currency per order',
+        description: 'Remove items priced in a different currency before checkout.',
+        variant: 'destructive',
+      })
+      return
+    }
     try {
       const items: Array<{ product_id: string; warehouse_id: string; quantity: number }> = []
       for (const item of cart) {

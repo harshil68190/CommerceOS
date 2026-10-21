@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm, type Resolver } from 'react-hook-form'
 import { Loader2 } from 'lucide-react'
@@ -39,31 +40,47 @@ interface ProductFormDialogProps {
   product?: Product | null
 }
 
+function getProductFormDefaults(
+  product?: Product | null,
+): ProductFormValues {
+  return {
+    sku: product?.sku ?? '',
+    slug: product?.slug ?? '',
+    name: product?.name ?? '',
+    description: product?.description ?? '',
+    short_description: product?.short_description ?? '',
+    brand: product?.brand ?? '',
+    category: product?.category ?? '',
+    price: product?.price ?? '',
+    compare_at_price: product?.compare_at_price ?? '',
+    currency: product?.currency ?? 'INR',
+    weight: product?.weight ?? '',
+    status: (
+      product?.status === 'active' || product?.status === 'draft'
+        ? product.status
+        : 'active'
+    ) as 'active' | 'draft',
+    is_featured: product?.is_featured ?? false,
+    track_inventory: product?.track_inventory ?? true,
+  }
+}
+
 export function ProductFormDialog({ open, onOpenChange, product }: ProductFormDialogProps) {
   const isEdit = !!product
 
   const createMutation = useCreateProduct()
   const updateMutation = useUpdateProduct()
 
-const form = useForm<ProductFormValues>({
+  const form = useForm<ProductFormValues>({
     resolver: zodResolver(productSchema) as Resolver<ProductFormValues>,
-    defaultValues: {
-      sku: product?.sku ?? '',
-      slug: product?.slug ?? '',
-      name: product?.name ?? '',
-      description: product?.description ?? '',
-      short_description: product?.short_description ?? '',
-      brand: product?.brand ?? '',
-      category: product?.category ?? '',
-      price: product?.price ?? '',
-      compare_at_price: product?.compare_at_price ?? '',
-      currency: product?.currency ?? 'USD',
-      weight: product?.weight ?? '',
-      status: (product?.status === 'active' || product?.status === 'draft' ? product.status : 'active') as 'active' | 'draft',
-      is_featured: product?.is_featured ?? false,
-      track_inventory: product?.track_inventory ?? true,
-    },
+    defaultValues: getProductFormDefaults(product),
   })
+  const { reset } = form
+  useEffect(() => {
+    if (open) {
+      reset(getProductFormDefaults(product))
+    }
+  }, [open, product, reset])
 
   async function onSubmit(values: ProductFormValues) {
     try {
@@ -232,7 +249,7 @@ const form = useForm<ProductFormValues>({
                   <FormItem>
                     <FormLabel>Currency</FormLabel>
                     <FormControl>
-                      <Input placeholder="USD" maxLength={3} {...field} />
+                      <Input placeholder="INR" maxLength={3} {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -245,7 +262,7 @@ const form = useForm<ProductFormValues>({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Status</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Select status" />

@@ -63,7 +63,7 @@ class CreateProductRequest(BaseModel):
 
     price: Decimal = Field(gt=0)
     compare_at_price: Decimal | None = Field(default=None, gt=0)
-    currency: str = Field(default="USD", min_length=3, max_length=3)
+    currency: str = Field(default="INR", min_length=3, max_length=3)
 
     # NOTE: stock_quantity is no longer accepted here. Inventory is
     # managed exclusively through the Inventory module. Use

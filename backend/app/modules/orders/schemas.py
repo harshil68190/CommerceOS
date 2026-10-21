@@ -148,6 +148,7 @@ class OrderResponse(BaseModel):
     shipping_cost: Decimal
     discount: Decimal
     total: Decimal
+    currency: str
     payment_status: PaymentStatus
     payment_method: str
     notes: str | None

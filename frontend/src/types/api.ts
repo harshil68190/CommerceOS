@@ -320,6 +320,7 @@ export interface Order {
   shipping_cost: string
   discount: string
   total: string
+  currency: string
   payment_status: PaymentStatus
   notes: string | null
   reserved_until: string | null

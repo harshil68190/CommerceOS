@@ -26,9 +26,9 @@ from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
-from app.core.exceptions import NotFoundError, ValidationError
+from app.core.exceptions import ForbiddenError, NotFoundError, ValidationError
 from app.models.product import Product, ProductStatus
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.modules.inventory.stock_movement_service import StockMovementService
 from app.modules.orders.constants import (
     CANCELLABLE_STATUSES,
@@ -110,7 +110,16 @@ class OrderService:
         """
         # Validate items and build lookup data
         items_data = self._validate_and_prepare_items(payload.items, current_user)
+        currencies = {
+            item_data["currency"].upper()
+            for item_data in items_data
+        }
 
+        if len(currencies) != 1:
+            raise ValidationError(
+                "All products in an order must use the same currency."
+            )
+        currency = next(iter(currencies))
         # Calculate monetary fields
         subtotal = sum(item_data["line_total"] for item_data in items_data)
         if payload.discount > subtotal:
@@ -140,6 +149,7 @@ class OrderService:
             updated_by=current_user.id,
             payment_status=PaymentStatus.UNPAID,
             payment_method=payload.payment_method,
+            currency=currency,
         )
         with self.db.begin_nested():
             order = self.order_repo.create(order)
@@ -186,14 +196,19 @@ class OrderService:
         If shipping_cost or discount changes, the total is recalculated.
         """
         order = self._get_order_or_404(order_id)
-
+        self._ensure_customer_owns_order(order, current_user)
         if order.status != OrderStatus.PENDING:
             raise OrderCannotBeModifiedError(
                 "Only pending orders can be modified."
             )
 
         updates = payload.model_dump(exclude_unset=True)
-
+        if current_user.role == UserRole.CUSTOMER and (
+            "shipping_cost" in updates or "discount" in updates
+        ):
+            raise ForbiddenError(
+                "Customers cannot change shipping costs or discounts."
+            )
         recalc_total = False
         if "shipping_cost" in updates:
             recalc_total = True
@@ -253,7 +268,6 @@ class OrderService:
                     status=OrderStatus.CONFIRMED,
                     updated_by=current_user.id,
                 )
-
                 for item in order.items:
                     self.stock_service.confirm_reservation(
                         product_id=item.product_id,
@@ -341,7 +355,7 @@ class OrderService:
         Only allowed before SHIPPED.
         """
         order = self._get_order_or_404(order_id)
-
+        self._ensure_customer_owns_order(order, current_user)
         if order.status not in CANCELLABLE_STATUSES:
             raise InvalidOrderStatusTransitionError(
                 f"Order {order.order_number} is {order.status.value} and "
@@ -366,15 +380,28 @@ class OrderService:
     # =========================================================================
 
     def return_order(self, order_id: uuid.UUID, current_user: User) -> Order:
-        """DELIVERED -> RETURNED. Customer returned items."""
+        """Return delivered items to inventory and mark the order returned."""
         order = self._get_order_or_404(order_id)
+        self._ensure_customer_owns_order(order, current_user)
         self._validate_transition(order, OrderStatus.RETURNED)
 
-        order = self.order_repo.update(
-            order,
-            status=OrderStatus.RETURNED,
-            updated_by=current_user.id,
-        )
+        with self.db.begin_nested():
+            for item in order.items:
+                self.stock_service.return_stock(
+                    product_id=item.product_id,
+                    warehouse_id=item.warehouse_id,
+                    quantity=item.quantity,
+                    current_user_id=current_user.id,
+                    reference_number=order.order_number,
+                    notes=f"Customer return for order {order.order_number}",
+                )
+
+            order = self.order_repo.update(
+                order,
+                status=OrderStatus.RETURNED,
+                updated_by=current_user.id,
+            )
+
         self.db.commit()
         return order
 
@@ -383,9 +410,14 @@ class OrderService:
     # =========================================================================
 
     def refund_order(self, order_id: uuid.UUID, current_user: User) -> Order:
-        """RETURNED -> REFUNDED. Refund completed."""
+        """Refund a returned order only when payment was collected."""
         order = self._get_order_or_404(order_id)
         self._validate_transition(order, OrderStatus.REFUNDED)
+
+        if order.payment_status != PaymentStatus.PAID:
+            raise ValidationError(
+                "Cannot refund an order whose payment has not been collected."
+            )
 
         order = self.order_repo.update(
             order,
@@ -439,7 +471,7 @@ class OrderService:
     ) -> OrderItem:
         """Adds a new item to a PENDING order and reserves inventory."""
         order = self._get_order_or_404(order_id)
-
+        self._ensure_customer_owns_order(order, current_user)
         if order.status != OrderStatus.PENDING:
             raise OrderCannotBeModifiedError(
                 "Items can only be added to pending orders."
@@ -454,10 +486,12 @@ class OrderService:
             raise OrderItemValidationError(
                 f"Product '{product.name}' is not active."
             )
-
+        if product.currency.upper() != order.currency.upper():
+            raise ValidationError(
+                "All items in an order must use the same currency."
+            )
         unit_price = product.price
         line_total = unit_price * Decimal(payload.quantity)
-
         self.stock_service.reserve_stock(
             product_id=payload.product_id,
             warehouse_id=payload.warehouse_id,
@@ -493,7 +527,7 @@ class OrderService:
     ) -> OrderItem:
         """Updates an item on a PENDING order (quantity only)."""
         order = self._get_order_or_404(order_id)
-
+        self._ensure_customer_owns_order(order, current_user)
         if order.status != OrderStatus.PENDING:
             raise OrderCannotBeModifiedError(
                 "Items can only be modified on pending orders."
@@ -548,7 +582,7 @@ class OrderService:
     ) -> None:
         """Removes an item from a PENDING order and releases its inventory."""
         order = self._get_order_or_404(order_id)
-
+        self._ensure_customer_owns_order(order, current_user)
         if order.status != OrderStatus.PENDING:
             raise OrderCannotBeModifiedError(
                 "Items can only be removed from pending orders."
@@ -577,7 +611,17 @@ class OrderService:
     # =========================================================================
     # Internal helpers
     # =========================================================================
-
+    def _ensure_customer_owns_order(
+        self, order: Order, current_user: User
+    ) -> None:
+        """Prevent customers from modifying orders they do not own."""
+        if (
+            current_user.role == UserRole.CUSTOMER
+            and order.customer_id != current_user.id
+        ):
+            raise ForbiddenError(
+                "You can only modify your own orders."
+            )
     def _get_order_or_404(self, order_id: uuid.UUID) -> Order:
         """Returns an order or raises OrderNotFoundError."""
         order = self.order_repo.get_by_id(order_id)
@@ -627,7 +671,6 @@ class OrderService:
                 raise OrderItemValidationError(
                     f"Product '{product.name}' is not active."
                 )
-
             # Validate the warehouse exists and is active BEFORE creating the
             # order item / reserving stock. Without this, a nonexistent
             # warehouse surfaces as a raw ForeignKeyViolation (500) instead of
@@ -652,6 +695,7 @@ class OrderService:
                     "quantity": item.quantity,
                     "unit_price": unit_price,
                     "line_total": line_total,
+                    "currency": product.currency,
                 }
             )
         return items_data

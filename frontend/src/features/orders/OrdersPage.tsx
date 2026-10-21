@@ -27,19 +27,34 @@ export default function OrdersPage() {
   const adminFilters = { page, page_size: 20, sort: 'newest', status: status || undefined }
   const customerOrders = useMyOrders({ page, page_size: 20, sort: 'newest', status: status || undefined }, isCustomer)
   const adminOrders = useOrders(adminFilters, !isCustomer)
+  const pendingSummary = useOrders(
+    { page: 1, page_size: 1, status: 'pending' },
+    !isCustomer,
+  )
+  const confirmedSummary = useOrders(
+    { page: 1, page_size: 1, status: 'confirmed' },
+    !isCustomer,
+  )
+  const shippedSummary = useOrders(
+    { page: 1, page_size: 1, status: 'shipped' },
+    !isCustomer,
+  )
+  const deliveredSummary = useOrders(
+    { page: 1, page_size: 1, status: 'delivered' },
+    !isCustomer,
+  )
   const { data, isLoading, error, refetch } = isCustomer ? customerOrders : adminOrders
 
   const orders = useMemo(() => data?.items ?? [], [data?.items])
   const pages = data?.pages ?? 1
   const total = data?.total ?? 0
 
-  const summary = useMemo(() => {
-    const counts = { pending: 0, confirmed: 0, shipped: 0, delivered: 0 }
-    for (const order of orders) {
-      if (order.status in counts) counts[order.status as keyof typeof counts] += 1
-    }
-    return counts
-  }, [orders])
+  const summary = {
+    pending: pendingSummary.data?.total ?? 0,
+    confirmed: confirmedSummary.data?.total ?? 0,
+    shipped: shippedSummary.data?.total ?? 0,
+    delivered: deliveredSummary.data?.total ?? 0,
+  }
 
   const columns: Column<Order>[] = [
     {
@@ -62,7 +77,7 @@ export default function OrdersPage() {
         </div>
       ),
     }] : []),
-    { key: 'total', header: 'Total', cell: (o) => <span className="font-medium">{formatCurrency(o.total)}</span> },
+    { key: 'total', header: 'Total', cell: (o) => <span className="font-medium">{formatCurrency(o.total, o.currency)}</span> },
     { key: 'status', header: 'Status', cell: (o) => <StatusBadge status={o.status} /> },
     { key: 'payment', header: 'Payment', cell: (o) => <StatusBadge status={o.payment_status} /> },
   ]
@@ -95,7 +110,25 @@ export default function OrdersPage() {
             { label: 'Shipped', value: summary.shipped },
             { label: 'Delivered', value: summary.delivered },
           ].map((item) => (
-            <Card key={item.label} role="button" tabIndex={0} onClick={() => { setStatus(item.label.toLowerCase()); setPage(1) }} className="cursor-pointer border-0 bg-muted/30 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+            <Card
+              key={item.label}
+              role="button"
+              tabIndex={0}
+              aria-label={`Filter orders by ${item.label.toLowerCase()} status`}
+              aria-pressed={status === item.label.toLowerCase()}
+              onClick={() => {
+                setStatus(item.label.toLowerCase())
+                setPage(1)
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault()
+                  setStatus(item.label.toLowerCase())
+                  setPage(1)
+                }
+              }}
+              className="cursor-pointer border-0 bg-muted/30 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            >
               <CardContent className="flex items-center justify-between p-4">
                 <div>
                   <div className="text-sm text-muted-foreground">{item.label}</div>

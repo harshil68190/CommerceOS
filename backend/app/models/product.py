@@ -117,7 +117,7 @@ class Product(Base):
 
     price: Mapped[Decimal] = mapped_column(Numeric(10, 2), index=True, nullable=False)
     compare_at_price: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
-    currency: Mapped[str] = mapped_column(String(3), default="USD", nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), default="INR", nullable=False)
 
     # NOTE: stock_quantity and reserved_quantity were removed from this
     # model in the inventory module milestone. Inventory is now the

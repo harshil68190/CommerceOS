@@ -27,6 +27,7 @@ import { ordersApi } from '@/lib/api/orders'
 import { inventoryApi } from '@/lib/api/inventory'
 import { queryKeys } from '@/lib/query/queryKeys'
 import { formatCurrency, formatDate } from '@/lib/utils'
+import { useOrders } from '@/features/orders/hooks'
 
 const PIE_COLORS = ['#10b981', '#f59e0b', '#ef4444']
 
@@ -55,6 +56,23 @@ export default function DashboardPage() {
     queryFn: () => ordersApi.list({ page: 1, page_size: 100, sort: 'newest' }),
     enabled: canReadOrders,
   })
+
+  const pendingOrdersCount = useOrders(
+    { page: 1, page_size: 1, status: 'pending' },
+    canReadOrders,
+  )
+  const confirmedOrdersCount = useOrders(
+    { page: 1, page_size: 1, status: 'confirmed' },
+    canReadOrders,
+  )
+  const shippedOrdersCount = useOrders(
+    { page: 1, page_size: 1, status: 'shipped' },
+    canReadOrders,
+  )
+  const deliveredOrdersCount = useOrders(
+    { page: 1, page_size: 1, status: 'delivered' },
+    canReadOrders,
+  )
 
   const customerOrdersQuery = useQuery({
     queryKey: queryKeys.orders.my({ page: 1, page_size: 5, sort: 'newest' }),
@@ -90,7 +108,7 @@ export default function DashboardPage() {
   const customerCatalogTotal = customerProductsQuery.data?.total ?? 0
   const customerOpenOrders = customerOrdersQuery.data?.items.filter((order) => ['pending', 'confirmed', 'shipped'].includes(order.status)).length ?? 0
   const totalOrders = ordersQuery.data?.total ?? 0
-  const pendingOrders = ordersQuery.data?.items.filter((order) => order.status === 'pending').length ?? 0
+  const pendingOrders = pendingOrdersCount.data?.total ?? 0
   const lowStockCount = lowStockQuery.data?.total ?? 0
   const outOfStockCount = outOfStockQuery.data?.total ?? 0
   const warehouseCount = warehousesQuery.data?.total ?? 0
@@ -105,16 +123,12 @@ export default function DashboardPage() {
     return baseline
   }, [inventoryQuery.data])
 
-  const orderStatusCounts = useMemo(() => {
-    const baseline = { pending: 0, confirmed: 0, shipped: 0, delivered: 0 }
-    for (const order of ordersQuery.data?.items ?? []) {
-      if (order.status === 'pending') baseline.pending += 1
-      if (order.status === 'confirmed') baseline.confirmed += 1
-      if (order.status === 'shipped') baseline.shipped += 1
-      if (order.status === 'delivered') baseline.delivered += 1
-    }
-    return baseline
-  }, [ordersQuery.data])
+  const orderStatusCounts = {
+    pending: pendingOrdersCount.data?.total ?? 0,
+    confirmed: confirmedOrdersCount.data?.total ?? 0,
+    shipped: shippedOrdersCount.data?.total ?? 0,
+    delivered: deliveredOrdersCount.data?.total ?? 0,
+  }
 
   const stockAlerts = useMemo(() => {
     const map = new Map<string, { product_id: string; product_name: string; product_sku: string; warehouse_name: string; warehouse_code: string; available_quantity: number; reorder_level: number; stock_status: string }>()
@@ -453,7 +467,7 @@ export default function DashboardPage() {
                             </div>
                           </div>
                           <div className="text-right">
-                            <div className="font-medium">{formatCurrency(order.total)}</div>
+                            <div className="font-medium">{formatCurrency(order.total, order.currency)}</div>
                             <div className="mt-1"><StatusBadge status={order.status} /></div>
                           </div>
                         </button>

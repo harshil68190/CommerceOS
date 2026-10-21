@@ -107,6 +107,70 @@ class StockMovementService:
         return inventory, transaction
 
     @_atomic_movement
+    def return_stock(
+        self,
+        *,
+        product_id,
+        warehouse_id,
+        quantity,
+        current_user_id,
+        reference_number=None,
+        notes=None,
+    ):
+        """Restock items returned by a customer and record the movement."""
+        self._validate_quantity(quantity)
+        self._validate_product_exists(product_id)
+
+        # Returns may need to be received at an inactive warehouse.
+        warehouse = self.warehouse_repo.get_by_id(warehouse_id)
+        if warehouse is None:
+            raise NotFoundError(f"Warehouse {warehouse_id} not found.")
+
+        inventory = self.inventory_repo.get_for_update(
+            product_id, warehouse_id
+        )
+
+        if inventory is None:
+            inventory = Inventory(
+                product_id=product_id,
+                warehouse_id=warehouse_id,
+                quantity=0,
+                reserved_quantity=0,
+                reorder_level=0,
+                max_stock=0,
+            )
+            inventory = self.inventory_repo.create(inventory)
+
+        previous_qty = inventory.quantity
+        previous_reserved = inventory.reserved_quantity
+
+        inventory = self.inventory_repo.update(
+            inventory,
+            quantity=inventory.quantity + quantity,
+        )
+
+        transaction = self._create_transaction(
+            product_id=product_id,
+            warehouse_id=warehouse_id,
+            transaction_type=InventoryTransactionType.RETURN,
+            quantity=quantity,
+            previous_quantity=previous_qty,
+            new_quantity=inventory.quantity,
+            previous_reserved_quantity=previous_reserved,
+            new_reserved_quantity=inventory.reserved_quantity,
+            reference_number=reference_number,
+            notes=notes or "Customer return restocked",
+            created_by=current_user_id,
+        )
+
+        logger.info(
+            "Returned stock restocked: product=%s warehouse=%s quantity=%d",
+            product_id,
+            warehouse_id,
+            quantity,
+        )
+        return inventory, transaction
+    @_atomic_movement
     def remove_stock(self, *, product_id, warehouse_id, quantity, current_user_id, reason="adjustment", reference_number=None, notes=None):
         self._validate_quantity(quantity)
         self._validate_warehouse_active(warehouse_id)

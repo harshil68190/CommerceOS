@@ -117,20 +117,20 @@ async function runTransition(
           <CardContent className="space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">Subtotal</span>
-              <span>{formatCurrency(order.subtotal)}</span>
+              <span>{formatCurrency(order.subtotal, order.currency)}</span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">Shipping</span>
-              <span>{order.shipping_cost ? formatCurrency(order.shipping_cost) : '—'}</span>
+              <span>{order.shipping_cost ? formatCurrency(order.shipping_cost, order.currency) : '—'}</span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">Discount</span>
-              <span>{order.discount ? `-${formatCurrency(order.discount)}` : '—'}</span>
+              <span>{order.discount ? `-${formatCurrency(order.discount, order.currency)}` : '—'}</span>
             </div>
             <Separator />
             <div className="flex items-center justify-between font-bold">
               <span>Total</span>
-              <span>{formatCurrency(order.total)}</span>
+              <span>{formatCurrency(order.total, order.currency)}</span>
             </div>
           </CardContent>
         </Card>
@@ -249,14 +249,28 @@ async function runTransition(
             )}
             {order.status === 'returned' && (
               <RoleGate roles={['admin']}>
-                <Button
-                  className="w-full"
-                  disabled={mutating}
-                  onClick={() => runTransition(refundMutation.mutateAsync, 'Refund completed')}
-                >
-                  {refundMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Process Refund
-                </Button>
+                {order.payment_status === 'paid' ? (
+                  <Button
+                    className="w-full"
+                    disabled={mutating}
+                    onClick={() =>
+                      runTransition(
+                        refundMutation.mutateAsync,
+                        'Refund completed',
+                      )
+                    }
+                  >
+                    {refundMutation.isPending && (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    )}
+                    Process Refund
+                  </Button>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    Return processed. No refund is due because payment was
+                    not collected.
+                  </p>
+                )}
               </RoleGate>
             )}
             {(order.status === 'cancelled' || order.status === 'refunded') && (
@@ -283,9 +297,9 @@ async function runTransition(
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="font-medium">{formatCurrency(item.line_total)}</div>
+                  <div className="font-medium">{formatCurrency(item.line_total, order.currency)}</div>
                   <div className="text-xs text-muted-foreground">
-                    {formatCurrency(item.unit_price)} each
+                    {formatCurrency(item.unit_price, order.currency)} each
                   </div>
                 </div>
               </div>

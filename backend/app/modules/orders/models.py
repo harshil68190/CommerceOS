@@ -96,7 +96,12 @@ class Order(Base):
         index=True,
         nullable=False,
     )
-
+    currency: Mapped[str] = mapped_column(
+        String(3),
+        default="INR",
+        server_default="INR",
+        nullable=False,
+    )
     # --- Monetary fields ---------------------------------------------------
     subtotal: Mapped[Decimal] = mapped_column(
         Numeric(12, 2), nullable=False, default=Decimal("0.00")

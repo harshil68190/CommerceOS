@@ -9,12 +9,12 @@ export function cn(...inputs: ClassValue[]) {
 /** Format a Decimal string (returned by the backend) as currency. */
 export function formatCurrency(
   value: string | number | null | undefined,
-  currency = 'USD',
+  currency = 'INR',
 ): string {
   if (value === null || value === undefined || value === '') return '—'
   const num = Number(value)
   if (Number.isNaN(num)) return '—'
-  return new Intl.NumberFormat('en-US', {
+  return new Intl.NumberFormat('en-IN', {
     style: 'currency',
     currency,
   }).format(num)

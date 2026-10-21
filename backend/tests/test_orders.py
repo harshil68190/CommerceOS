@@ -168,6 +168,30 @@ class TestOrderCreation:
         )
         assert Decimal(body["total"]) == expected_total
 
+    def test_mixed_currency_order_is_rejected(
+    self,
+    authenticated_customer_client: TestClient,
+    inventory_factory,
+    db_session: Session,
+    ):
+        product_a, warehouse_a, _ = _setup_inventory(inventory_factory)
+        product_b, warehouse_b, _ = _setup_inventory(inventory_factory)
+
+        product_a.currency = "USD"
+        product_b.currency = "INR"
+        db_session.flush()
+        response = authenticated_customer_client.post(
+            "/api/v1/orders",
+            json=_order_payload([
+                (product_a, warehouse_a, 1),
+                (product_b, warehouse_b, 1),
+            ]),
+        )
+        _assert_error_envelope(
+            response,
+            status_code=422,
+            error_code="VALIDATION_ERROR",
+        )
     def test_create_order_with_shipping(
         self, authenticated_customer_client: TestClient, inventory_factory
     ):
@@ -540,6 +564,12 @@ class TestOrderLifecycle:
         authenticated_admin_client.patch(f"/api/v1/orders/{order_id}/ship")
         authenticated_admin_client.patch(f"/api/v1/orders/{order_id}/deliver")
 
+        payment_resp = authenticated_admin_client.patch(
+            f"/api/v1/orders/{order_id}/confirm-payment"
+        )
+        assert payment_resp.status_code == 200
+        assert payment_resp.json()["payment_status"] == "paid"
+
         resp = authenticated_admin_client.patch(f"/api/v1/orders/{order_id}/return")
         assert resp.status_code == 200
         assert resp.json()["status"] == "returned"
@@ -549,6 +579,46 @@ class TestOrderLifecycle:
         assert resp.json()["status"] == "refunded"
         assert resp.json()["payment_status"] == "refunded"
 
+    def test_unpaid_cod_order_cannot_be_refunded(
+        self,
+        authenticated_customer_client: TestClient,
+        authenticated_admin_client: TestClient,
+        inventory_factory,
+    ):
+        _, _, order = self._create_order(
+            authenticated_customer_client, inventory_factory
+        )
+        order_id = order["id"]
+
+        authenticated_admin_client.patch(
+            f"/api/v1/orders/{order_id}/accept"
+        )
+        authenticated_admin_client.patch(
+            f"/api/v1/orders/{order_id}/ship"
+        )
+        authenticated_admin_client.patch(
+            f"/api/v1/orders/{order_id}/deliver"
+        )
+        returned = authenticated_admin_client.patch(
+            f"/api/v1/orders/{order_id}/return"
+        )
+        assert returned.status_code == 200
+
+        refund = authenticated_admin_client.patch(
+            f"/api/v1/orders/{order_id}/refund"
+        )
+        _assert_error_envelope(
+            refund,
+            status_code=422,
+            error_code="VALIDATION_ERROR",
+        )
+
+        detail = authenticated_admin_client.get(
+            f"/api/v1/orders/{order_id}"
+        )
+        assert detail.status_code == 200
+        assert detail.json()["status"] == "returned"
+        assert detail.json()["payment_status"] == "unpaid"
 
 # =========================================================================
 # 4. Inventory Integration
@@ -629,6 +699,55 @@ class TestOrderInventoryIntegration:
         assert inv.quantity == 90
         assert inv.reserved_quantity == 0
 
+    def test_return_restocks_inventory_once(
+        self,
+        authenticated_customer_client: TestClient,
+        authenticated_admin_client: TestClient,
+        inventory_factory,
+        db_session: Session,
+    ):
+        product, warehouse, _ = _setup_inventory(inventory_factory)
+        order_response = authenticated_customer_client.post(
+            "/api/v1/orders",
+            json=_order_payload([(product, warehouse, 10)]),
+        )
+        assert order_response.status_code == 201, order_response.text
+        order = order_response.json()
+        order_id = order["id"]
+
+        accepted = authenticated_admin_client.patch(
+            f"/api/v1/orders/{order_id}/accept"
+        )
+        assert accepted.status_code == 200
+
+        authenticated_admin_client.patch(
+            f"/api/v1/orders/{order_id}/ship"
+        )
+        authenticated_admin_client.patch(
+            f"/api/v1/orders/{order_id}/deliver"
+        )
+
+        inventory = _get_inventory(db_session, product.id, warehouse.id)
+        assert inventory.quantity == 90
+        assert inventory.reserved_quantity == 0
+
+        returned = authenticated_admin_client.patch(
+            f"/api/v1/orders/{order_id}/return"
+        )
+        assert returned.status_code == 200
+        assert returned.json()["status"] == "returned"
+
+        inventory = _get_inventory(db_session, product.id, warehouse.id)
+        assert inventory.quantity == 100
+        assert inventory.reserved_quantity == 0
+
+        duplicate = authenticated_admin_client.patch(
+            f"/api/v1/orders/{order_id}/return"
+        )
+        assert duplicate.status_code == 409
+
+        inventory = _get_inventory(db_session, product.id, warehouse.id)
+        assert inventory.quantity == 100
 
 # =========================================================================
 # 5. Transaction Integrity
@@ -860,6 +979,91 @@ class TestOrderRBAC:
         resp = authenticated_customer_client.get("/api/v1/orders")
         _assert_error_envelope(resp, status_code=403, error_code="FORBIDDEN")
 
+    def test_customer_cannot_modify_another_customers_order(
+        self,
+        client_factory,
+        user_factory,
+        access_token_factory,
+        inventory_factory,
+    ):
+        product, warehouse, _ = _setup_inventory(inventory_factory)
+        other_product, other_warehouse, _ = _setup_inventory(
+            inventory_factory
+        )
+
+        owner = user_factory(role=UserRole.CUSTOMER)
+        stranger = user_factory(role=UserRole.CUSTOMER)
+
+        owner_client = client_factory(
+            access_token=access_token_factory(owner)
+        )
+        stranger_client = client_factory(
+            access_token=access_token_factory(stranger)
+        )
+
+        response = owner_client.post(
+            "/api/v1/orders",
+            json=_order_payload([(product, warehouse, 1)]),
+        )
+        assert response.status_code == 201
+        order = response.json()
+        order_id = order["id"]
+        item_id = order["items"][0]["id"]
+
+        responses = [
+            stranger_client.patch(
+                f"/api/v1/orders/{order_id}",
+                json={"notes": "Unauthorized change"},
+            ),
+            stranger_client.patch(
+                f"/api/v1/orders/{order_id}/cancel",
+                json={"reason": "Unauthorized cancellation"},
+            ),
+            stranger_client.post(
+                f"/api/v1/orders/{order_id}/items",
+                json={
+                    "product_id": str(other_product.id),
+                    "warehouse_id": str(other_warehouse.id),
+                    "quantity": 1,
+                },
+            ),
+            stranger_client.patch(
+                f"/api/v1/orders/{order_id}/items/{item_id}",
+                json={"quantity": 2},
+            ),
+            stranger_client.delete(
+                f"/api/v1/orders/{order_id}/items/{item_id}"
+            ),
+        ]
+
+        for response in responses:
+            _assert_error_envelope(
+                response,
+                status_code=403,
+                error_code="FORBIDDEN",
+            )
+
+    def test_customer_cannot_change_order_pricing(
+        self,
+        authenticated_customer_client,
+        inventory_factory,
+    ):
+        product, warehouse, _ = _setup_inventory(inventory_factory)
+        order_resp = authenticated_customer_client.post(
+            "/api/v1/orders",
+            json=_order_payload([(product, warehouse, 1)]),
+        )
+        assert order_resp.status_code == 201
+        order = order_resp.json()
+        response = authenticated_customer_client.patch(
+            f"/api/v1/orders/{order['id']}",
+            json={"discount": "1.00"},
+        )
+        _assert_error_envelope(
+            response,
+            status_code=403,
+            error_code="FORBIDDEN",
+        )
     def test_customer_cannot_confirm_payment(
         self, authenticated_customer_client: TestClient, inventory_factory
     ):
